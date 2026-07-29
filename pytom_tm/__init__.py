@@ -19,7 +19,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineVar(PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD)
+        cls._defineVar(PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD) #association key-value
 
 
     @classmethod
@@ -46,7 +46,7 @@ class Plugin(pwem.Plugin):
                        version=PYTOM_TM_DEFAULT_VERSION,
                        tar='void.tgz',
                        commands=PYTOM_TM_commands,
-                       neededProgs=cls.getDependencies(),
+                       neededProgs=cls.getDependencies(), #check if dependencies are available before starting the installation
                        #vars=installEnvVars,
                        default=True)
 
