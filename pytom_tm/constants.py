@@ -11,5 +11,8 @@ PYTOM_TM_DEFAULT_ACTIVATION_CMD = f'conda activate {PYTOM_TM_ENV_NAME}'
 
 #Inputs
 IN_TOMOS = 'inTomos'
+IN_CTF_SET = 'inCtfSet'
+IN_TS_SET = 'inTsSet'
 REF_VOL = 'reference'
 IN_MASK = 'mask'
+VOL_MASK = 'volMask'

@@ -21,6 +21,9 @@ class Plugin(pwem.Plugin):
     def _defineVariables(cls):
         cls._defineVar(PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD) #association key-value
 
+    @classmethod
+    def getPyTomEnvActivation(cls):
+        return cls.getVar(PYTOM_TM_ENV_ACTIVATION)
 
     @classmethod
     def defineBinaries(cls, env):
@@ -58,4 +61,13 @@ class Plugin(pwem.Plugin):
         if not condaActivationCmd:
             neededProgs.append('conda')
         return neededProgs
+
+    @classmethod
+    def runGapStop(cls, protocol, program, args, cwd=None, numberOfMpi=1):
+        """ Run pytom command from a given protocol. """
+        cmd = cls.getCondaActivationCmd() + " "
+        cmd += cls.getPyTomEnvActivation()
+        cmd += f" && CUDA_VISIBLE_DEVICES=%(GPU)s {program} "
+
+        protocol.runJob(cmd, args, env=cls.getEnviron(), cwd=cwd, numberOfMpi=numberOfMpi)
 
