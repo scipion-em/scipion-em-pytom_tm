@@ -38,7 +38,7 @@ from pyworkflow.object import Pointer, String
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, EnumParam
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
 from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries
-from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements
+from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, invertContrast, convertOrLink
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +92,16 @@ class ProtPytomTemplateMatching(EMProtocol):
                       pointerClass='Volume',
                       important=True,
                       label="Reference volume")
+
+        form.addParam('invert_contrast', BooleanParam,
+                      default=True,
+                      label='Invert reference contrast?',
+                      important=True,
+                      help='The contrast of the template has to be the same as of the tomogram. If the '
+                           'tomogram has features in black (which is typically for cryoET) then the template '
+                           'has to have the same representation. For example, Relion outputs inverted '
+                           'contrast (features are white) and such maps have to be inverted prior running '
+                           'the Pytom_tm.')
 
         group = form.addGroup('Mask')
         group.addParam(IN_MASK, PointerParam,
@@ -310,16 +320,23 @@ class ProtPytomTemplateMatching(EMProtocol):
         try:
             # Convert or link the reference
             ref = self._getFormAttrib(REF_VOL)
-            if self.doInvertRefContrast.get():
-                self._invertReference(ref)
-            else:
-                self._convertOrLinkVolume(ref, self.refName)
+            inRefFile = ref.getFileName()
+            refFile = self.getReferenceFileName()
+            samplingRate = ref.getSamplingRate()
+
+            if self.invert_contrast.get():
+                invertContrast(inRefFile, refFile, samplingRate)
+            else:  # if the contrast inversion is not needed, only convert to .mrc
+                convertOrLink(inRefFile, refFile, samplingRate)
+
             # Convert or link the mask
             mask = self._getFormAttrib(IN_MASK)
-            self._convertOrLinkVolume(mask, self.maskName)
+            inMaskFile = mask.getFileName()
+            outMaskFile = self.getMaskFileName()
+            samplingRate = mask.getSamplingRate()
+            convertOrLink(inMaskFile, outMaskFile, samplingRate)
         except Exception as e:
             raise Exception(f'Reference conversion failed with the exception -> {e}')
-
 
     def convertInputStep(self, tsId: str):
         try:
@@ -345,7 +362,6 @@ class ProtPytomTemplateMatching(EMProtocol):
             self.failedTsIds.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
             logger.error(traceback.format_exc())
-
 
     def templateMatchingStep(self):
         pass
@@ -392,6 +408,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         else:
             return inTsPointer if returnPointer else inTsPointer.get()
 
+    # if IN_TS_SET is not an input, get it yourself via:
     def _getTsFromRelations(self) -> Optional[SetOfTiltSeries]:
         inCTFs = self._getFormAttrib(IN_CTF_SET)
         return getObjFromRelation(inCTFs, self, SetOfTiltSeries)
@@ -399,11 +416,15 @@ class ProtPytomTemplateMatching(EMProtocol):
     def _getCurrentTomoDir(self, tsId: str) -> str:
         return self._getExtraPath(tsId)
 
+    def getReferenceFileName(self) -> str:
+        return self._getTmpPath('Reference.mrc')
+
+    def getMaskFileName(self) -> str:
+        return self._getTmpPath('Mask.mrc')
+
     def _generateArguments(self) -> str:
         cmd = [
             f'--template {}'
 
-
         ]
         return ' '.join(cmd)
-
