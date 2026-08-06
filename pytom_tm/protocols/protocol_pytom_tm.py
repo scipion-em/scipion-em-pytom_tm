@@ -31,13 +31,13 @@ from typing import List, Optional, Union
 from pwem.emlib.image import ImageHandler
 from pwem.objects import VolumeMask, Volume
 from pwem.protocols import EMProtocol
-from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, VOL_MASK, IN_TS_SET, IN_CTF_SET
+from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, EnumParam
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
-from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries
+from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks
 from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, invertContrast, convertOrLink
 
 logger = logging.getLogger(__name__)
@@ -211,11 +211,12 @@ class ProtPytomTemplateMatching(EMProtocol):
                          IntParam,
                          label='Z max',
                          allowsNull=True)
-        # TODO review
-        form.addParam(VOL_MASK, PointerParam,
-                      pointerClass=VolumeMask,
-                      label='Tomogram mask',
-                      help="Here you can provide a mask for matching with dimensions (in pixels) "
+
+        form.addParam(TOMO_MASKS, PointerParam,
+                      pointerClass=SetOfTomoMasks,
+                      label='Tomogram masks (segmentations)',
+                      allowsNull=True,
+                      help="Here you can provide a set of masks for matching with dimensions (in pixels) "
                            "equal to the tomogram. If a subvolume only has values <= 0 for this mask it "
                            "will be skipped."
                       )
@@ -259,6 +260,18 @@ class ProtPytomTemplateMatching(EMProtocol):
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
+        # FRANCESCA
+        import os
+        fname = "/home/francesa/test_FC.txt"
+        if os.path.exists(fname):
+            os.remove(fname)
+        with open(fname, "a+") as fjj:
+            fjj.write(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
+            print(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
+        import time
+        time.sleep(10)
+        # FRANCESCA_END
+
         self._initialize()
         closeSetStepDeps = []
 
@@ -287,6 +300,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         tsSet = self._getTsSet()
         tomoSet = self._getFormAttrib(IN_TOMOS)
         ctfSet = self._getFormAttrib(IN_CTF_SET)
+        tomoMasks = self._getFormAttrib(TOMO_MASKS)
         # self.refName = self._genConvertedOrLinkedRefName(REF_VOL)
         # self.maskName = self._genConvertedOrLinkedRefName(IN_MASK)
         # self.tomosSRate = tomoSet.getSamplingRate()
@@ -297,7 +311,14 @@ class ProtPytomTemplateMatching(EMProtocol):
         tsIds = set(tsSet.getTSIds())
         ctfTsIds = set(ctfSet.getTSIds())
         presentTsIds = tomosTsIds & tsIds & ctfTsIds
-        nonMatchingTsIds = tomosTsIds ^ tsIds ^ ctfTsIds
+        union = tomosTsIds | tsIds | ctfTsIds
+        nonMatchingTsIds = presentTsIds - union
+
+        if tomoMasks:
+            tomoMasksIds = set(tomoMasks.getTSIds())
+            presentTsIds = presentTsIds & tomoMasksIds
+            union = tomoMasksIds | union
+            nonMatchingTsIds = presentTsIds - union
 
         # Validate the intersection
         if len(presentTsIds) <= 0:
@@ -363,9 +384,14 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
             logger.error(traceback.format_exc())
 
-    def templateMatchingStep(self):
+    def templateMatchingStep(self, tsId: str):
         pass
 
+    def createOutputStep(self, tsId: str):
+        pass
+
+    def closeOutputSetStep(self):
+        pass
     # --------------------------- INFO functions ------------------------------
 
     def _validate(self) -> List[str]:
@@ -422,9 +448,9 @@ class ProtPytomTemplateMatching(EMProtocol):
     def getMaskFileName(self) -> str:
         return self._getTmpPath('Mask.mrc')
 
-    def _generateArguments(self) -> str:
-        cmd = [
-            f'--template {}'
-
-        ]
-        return ' '.join(cmd)
+    # def _generateArguments(self) -> str:
+    #     cmd = [
+    #         f'--template {}'
+    #
+    #     ]
+    #     return ' '.join(cmd)
