@@ -16,3 +16,14 @@ IN_TS_SET = 'inTsSet'
 REF_VOL = 'reference'
 IN_MASK = 'mask'
 TOMO_MASKS = 'volMask'
+
+#Extensions
+MRC_EXT = '.mrc'
+DEFOCUS_EXT = '.defocus'
+TILT_ANGLES_EXT = '.tlt'
+DOSE_EXT = '.txt'
+
+#suffix
+TOMO_SUFFIX = '_tomo'
+MAS_SUFFIX = '_tomoMask'
+DOSE_SUFFIX = '_dose'

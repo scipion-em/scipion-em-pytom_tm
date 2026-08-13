@@ -25,20 +25,30 @@
 # *
 # **************************************************************************
 import logging
+import os
 import traceback
+import typing
 from enum import Enum
+from os.path import join
 from typing import List, Optional, Union
-from pwem.emlib.image import ImageHandler
+
+import numpy as np
+from fidder.protocols.protocol_detect_and_erase_fiducials import MASK_SUFFIX
+
+from pwem.emlib.image.image_readers import MRCImageReader
 from pwem.objects import VolumeMask, Volume
 from pwem.protocols import EMProtocol
-from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET
+from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
+    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String
-from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, EnumParam
+from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
+    EnumParam
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
-from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks
-from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, invertContrast, convertOrLink
+from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks, TiltSeries, TiltImage
+from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, \
+    getTsIdsIntersection, getTsIdsDicts, invertContrast, convertOrLink, genDefocusFileFromScipion
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +69,14 @@ class ProtPytomTemplateMatching(EMProtocol):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.tsDict = None
-        self.ctfDict = None
-        self.refName = None
-        self.ih = ImageHandler()
+        self.tomoDict = {}
+        self.tsDict = {}
+        self.ctfDict = {}
+        self.tomoMaskDict = {}
+        self.refName = ''
         self.failedTsIds = []
         self.failedTsIdsStr = String()
+        self.samplingRate = -1
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -77,16 +89,13 @@ class ProtPytomTemplateMatching(EMProtocol):
         form.addParam(IN_CTF_SET, PointerParam,
                       pointerClass='SetOfCTFTomoSeries',
                       label="CTF tomo series",
-                      important=True,
-                      allowsNull=True)
+                      important=True)
 
         form.addParam(IN_TS_SET, PointerParam,
                       pointerClass='SetOfTiltSeries',
-                      allowsNull=True,
-                      expertLevel=LEVEL_ADVANCED,
-                      label='Tilt-series (opt.)',
-                      help='Used to get the tilt angles. If empty, the protocol will try to reach, via relations, '
-                           'the tilt-series associated to the introduced CTFs.')
+                      important=True,
+                      label='Tilt-series',
+                      help='Used to get the tilt angles.')
 
         form.addParam(REF_VOL, PointerParam,
                       pointerClass='Volume',
@@ -117,27 +126,14 @@ class ProtPytomTemplateMatching(EMProtocol):
                        )
 
         form.addSection(label='Angular Search')
-        form.addParam('particle_diameter', FloatParam,
-                      label='Particle Diameter (Angstroms)',
-                      allowsNull=False,
-                      help="Provide a particle diameter (in Angstrom) to automatically determine the "
-                           "angular sampling using the Crowther criterion. For the max resolution, "
-                           "(2 * pixel size) is used unless a low-pass filter is specified, "
-                           "in which case the low-pass resolution is used. For non-globular "
-                           "macromolecules choose the diameter along the longest axis."
-                      )
-
-        form.addParam('angular_search', StringParam,
-                      label='Angular Search',
-                      help="This option overrides the angular search calculation from the particle "
-                           "diameter. If given a float it will generate an angle list with healpix "
-                           "for Z1 and X1 and linear search for Z2. The provided angle will be used "
-                           "as the maximum for the "
-                           "linear search and for the mean angle difference from healpix."
-                           "Alternatively, a .txt file can be provided with three Euler angles "
-                           "(in radians) per line that define the angular search. "
-                           "Angle format is ZXZ anti-clockwise (see: "
-                           "https://www.ccpem.ac.uk/user_help/rotation_conventions.php).")
+        form.addParam('angular_search', FloatParam,
+                      label='Angular Search (deg)',
+                      important=True,
+                      default=7.,
+                      allowsNull=True,
+                      help="Angular increment of template search. "
+                           "If empty it will be computed from the maximum resolution (2*voxel_size or low_pass)"
+                           "and the particle box size.")
 
         form.addParam('z_axis_rotational_symmetry', IntParam,
                       label='Z Axis Rotational Symmetry',
@@ -160,6 +156,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                       display=EnumParam.DISPLAY_HLIST,
                       label='Defocus Handedness',
                       expertLevel=LEVEL_ADVANCED,
+                      default=0,
                       # condition='sum(map(int, volume_split)) > 3',  #  TODO
                       help="Specify the defocus handedness for defocus gradient correction of the "
                            "CTF in each subvolumes. The more subvolumes in x and z, "
@@ -224,14 +221,14 @@ class ProtPytomTemplateMatching(EMProtocol):
         form.addSection(label='Filter Control')
         form.addParam('low_pass', FloatParam,
                       label='Low Pass filter ',
-                      allowsNull=False,
+                      allowsNull=True,
                       help="Apply a low-pass filter to the tomogram and template. Generally desired "
                            "if the template was already filtered to a certain resolution. "
                            "Value is the resolution in A."
                       )
         form.addParam('high_pass', FloatParam,
                       label='High Pass filter ',
-                      allowsNull=False,
+                      allowsNull=True,
                       help="Apply a high-pass filter to the tomogram and template to reduce "
                            "correlation with large low frequency variations. Value is a resolution in A, "
                            "e.g. 500 could be appropriate as the CTF is often incorrectly modelled "
@@ -239,6 +236,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                       )
         form.addParam('spectral_whitening', BooleanParam,
                       label='Spectral Whitening',
+                      default=False,
                       help="Calculate a whitening filtering from the power spectrum of the tomogram; "
                            "apply it to the tomogram patch and template. Effectively puts more weight on "
                            "high resolution features and sharpens the correlation peaks.")
@@ -246,6 +244,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         form.addSection(label='Additional Parameters')
         form.addParam('random_phase_correction', BooleanParam,
                       label='Random Phase Correction',
+                      default=False,
                       help="Run template matching simultaneously with a phase randomized version of "
                            "the template, and subtract this 'noise' map from the final score map. "
                            "For this method please see STOPGAP as a reference: "
@@ -297,44 +296,30 @@ class ProtPytomTemplateMatching(EMProtocol):
         # -------------------------- STEPS functions ------------------------------
 
     def _initialize(self):
-        tsSet = self._getTsSet()
+        tsSet = self._getFormAttrib(IN_TS_SET)
         tomoSet = self._getFormAttrib(IN_TOMOS)
         ctfSet = self._getFormAttrib(IN_CTF_SET)
         tomoMasks = self._getFormAttrib(TOMO_MASKS)
+        self.samplingRate = tomoSet.getSamplingRate()
         # self.refName = self._genConvertedOrLinkedRefName(REF_VOL)
         # self.maskName = self._genConvertedOrLinkedRefName(IN_MASK)
         # self.tomosSRate = tomoSet.getSamplingRate()
         # self.tomosBinning = self._getTomogramsBinning()
 
         # Compute matching TS id among coordinates, the tilt-series and the CTFs, they all could be a subset
-        tomosTsIds = set(tomoSet.getTSIds())
-        tsIds = set(tsSet.getTSIds())
-        ctfTsIds = set(ctfSet.getTSIds())
-        presentTsIds = tomosTsIds & tsIds & ctfTsIds
-        union = tomosTsIds | tsIds | ctfTsIds
-        nonMatchingTsIds = presentTsIds - union
 
         if tomoMasks:
-            tomoMasksIds = set(tomoMasks.getTSIds())
-            presentTsIds = presentTsIds & tomoMasksIds
-            union = tomoMasksIds | union
-            nonMatchingTsIds = presentTsIds - union
+            presentTsIds = getTsIdsIntersection(tsSet, tomoSet, ctfSet, tomoMasks)
+            self.tsDict, self.tomoDict, self.ctfDict, self.tomoMaskDict = (
+                getTsIdsDicts(tsSet, tomoSet, ctfSet, tomoMasks, present_ts_ids=presentTsIds))
 
-        # Validate the intersection
-        if len(presentTsIds) <= 0:
-            raise Exception("There isn't any common tilt-series ids among the coordinates, CTFs, and tilt-series "
-                            "introduced.")
+            # self.tomoMaskDict = {tsId: tomoMasks.clone() for tomoMasks in tomoMasks.iterItems() if (tsId:=tomoMasks.getTsId()) in presentTsIds}
 
-        if len(nonMatchingTsIds) > 0:
-            logger.info(cyanStr(f"TsIds not common in the introduced tomograms, CTFs, and "
-                                f"tilt-series are: {nonMatchingTsIds}"))
+        else:
+            presentTsIds = getTsIdsIntersection(tsSet, tomoSet, ctfSet)
 
-        self.tomoDict = {tomo.getTsId(): tomo.clone() for tomo in tomoSet.iterItems()
-                         if tomo.getTsId() in presentTsIds}
-        self.tsDict = {ts.getTsId(): ts.clone() for ts in tsSet.iterItems()
-                       if ts.getTsId() in presentTsIds}
-        self.ctfDict = {ctf.getTsId(): ctf.clone(ignoreAttrs=[]) for ctf in ctfSet.iterItems()
-                        if ctf.getTsId() in presentTsIds}
+            self.tsDict, self.tomoDict, self.ctfDict = (
+                getTsIdsDicts(tsSet, tomoSet, ctfSet, present_ts_ids=presentTsIds))
 
     def convertReferenceStep(self):
         logger.info(cyanStr(f"Converting the reference in the required format...'"))
@@ -356,14 +341,31 @@ class ProtPytomTemplateMatching(EMProtocol):
             outMaskFile = self.getMaskFileName()
             samplingRate = mask.getSamplingRate()
             convertOrLink(inMaskFile, outMaskFile, samplingRate)
+
         except Exception as e:
             raise Exception(f'Reference conversion failed with the exception -> {e}')
 
     def convertInputStep(self, tsId: str):
+
         try:
+            tsDir = self._getCurrentTomoDir(tsId)
+            tsTmpDir = self._getCurrentTomoTmpDir(tsId)
+            makePath(tsDir, tsTmpDir)
+
             tomo = self.tomoDict[tsId]
+            inTomoFile = tomo.getFileName()
+            outTomoFile = self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)
+            convertOrLink(inTomoFile, outTomoFile, samplingRate=tomo.getSamplingRate())
+
+            if self.tomoMaskDict:
+                tomomask = self.tomoMaskDict[tsId]
+                inTomoMaskFile = tomomask.getFileName()
+                outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
+                convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=tomo.getSamplingRate())
+
             ts = self.tsDict[tsId]
             ctf = self.ctfDict[tsId]
+
             presentAcqOrders = getCommonTsAndCtfElements(ts, ctf)
             if len(presentAcqOrders) == 0:
                 raise Exception(f'tsId = {tsId} -> No common acquisition orders found between the '
@@ -372,12 +374,14 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.info(cyanStr(f"tsId = {tsId} -> present acquisition orders in both "
                                 f"the tilt-series and the CTF are {presentAcqOrders}.'"))
 
-            tsDir = self._getCurrentTomoDir(tsId)
-            makePath(tsDir)
+            outDefocus = self._getInputFileName(tsId, DEFOCUS_EXT)
+            genDefocusFileFromScipion(ctf, ts, outDefocus)
 
+            outTilt_Angles = self._getInputFileName(tsId, TILT_ANGLES_EXT)
+            ts.generateTltFile(outTilt_Angles, presentAcqOrders)
 
-
-
+            outDosePath = self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)
+            self.generateDoseFile(ts, outDosePath, presentAcqOrders)
 
         except Exception as e:
             self.failedTsIds.append(tsId)
@@ -385,26 +389,32 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.error(traceback.format_exc())
 
     def templateMatchingStep(self, tsId: str):
-        pass
+        pa
 
     def createOutputStep(self, tsId: str):
         pass
 
     def closeOutputSetStep(self):
         pass
+
     # --------------------------- INFO functions ------------------------------
 
     def _validate(self) -> List[str]:
         valMsg = []
-
-        if self.particle_diameter.get() < 0:
-            valMsg.append('Particle diameter must be >= 0')
+        lpf = self.low_pass.get()
+        hpf = self.high_pass.get()
 
         if self.z_axis_rotational_symmetry.get() < 0:
             valMsg.append('Z axis rotational symmetry must be >= 0')
 
         if not self.validate_volume_split(self.volume_split.get()):
             valMsg.append('Volume split must be a list of three integers (e.g. 1 1 1)')
+
+        if lpf is not None and hpf is not None:
+            if lpf <= 0 or hpf <= 0:
+                valMsg.append('Low and high pass filter must be >= 0')
+            elif lpf <= hpf:
+                valMsg.append('Low pass filter value must be higher than high pass filter value')
 
         return valMsg
 
@@ -421,10 +431,6 @@ class ProtPytomTemplateMatching(EMProtocol):
             return True
         except ValueError:
             return False
-
-    def _getTsSet(self) -> SetOfTiltSeries:
-        tsSet = self._getFormAttrib(IN_TS_SET)
-        return tsSet if tsSet else self._getTsFromRelations()
 
     def _getFormAttrib(self, attribName: str, returnPointer: bool = False) -> Optional[Union[SetOfTiltSeries,
     SetOfTomograms, SetOfCTFTomoSeries, Volume, Pointer]]:
@@ -443,14 +449,60 @@ class ProtPytomTemplateMatching(EMProtocol):
         return self._getExtraPath(tsId)
 
     def getReferenceFileName(self) -> str:
-        return self._getTmpPath('Reference.mrc')
+        return self._getTmpPath(f'Reference{MRC_EXT}')
 
     def getMaskFileName(self) -> str:
-        return self._getTmpPath('Mask.mrc')
+        return self._getTmpPath(f'Mask{MRC_EXT}')
 
-    # def _generateArguments(self) -> str:
-    #     cmd = [
-    #         f'--template {}'
-    #
-    #     ]
-    #     return ' '.join(cmd)
+    def _getCurrentTomoTmpDir(self, tsId: str) -> str:
+        return self._getTmpPath(tsId)
+
+    def _getConvertedOrLinkedName(self, tsId: str, suffix: str = '') -> str:
+        return join(self._getCurrentTomoTmpDir(tsId), f'{tsId}{suffix}{MRC_EXT}')
+
+    def _getInputFileName(self, tsId: str, ext: str, suffix: str = '') -> str:
+        return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{ext}')
+
+    def _getOutputFileName(self, tsId: str) -> str:
+        return self._getInputFileName(tsId, MRC_EXT)
+
+    def generateDoseFile(self,
+                         ts: TiltSeries,
+                         dosePath: str,
+                         presentAcqOrders: typing.Set[int]) -> None:
+
+        doseList = []
+        for ti in ts.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD):
+            if ti.getAcquisitionOrder() in presentAcqOrders:
+                doseList.append(ti.getAcquisition().getAccumDose())
+
+        with open(dosePath, 'w') as f:
+            f.writelines(f"{dose:0.2f}\n" for dose in doseList)
+            # For parallel processing, ensure that the file is completely written and persists on disk
+            f.flush()  # Empty python buffer
+            os.fsync(f.fileno())  # Empty system buffer
+
+    def getAngularStep(self) -> float:
+        angular_search= self.angular_search.get()
+        if angular_search:
+            return angular_search
+        else:
+            low_pass = self.low_pass.get()
+            x,y,z, _ = MRCImageReader.getDimensions(self.getReferenceFileName())
+            particle_diameter = max(x,y,z)
+            max_res = max(
+                2 * self.samplingRate, low_pass if low_pass is not None else 0
+            )
+            return np.rad2deg(max_res / particle_diameter)
+
+    def _generateArguments(self, tsId: str) -> str:
+        cmd = [
+            f'--template {self.getReferenceFileName()}',
+            f'--tomogram {self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)}',
+            f'--destination {self._getOutputFileName(tsId)}',
+            f'--mask {self.getMaskFileName()}',
+            f'--non-spherical-mask {self.non_spherical_mask.get()}',
+            f'--angular-search {self.getAngularStep()}',
+
+        ]
+        return ' '.join(cmd)
