@@ -39,6 +39,7 @@ from fidder.protocols.protocol_detect_and_erase_fiducials import MASK_SUFFIX
 from pwem.emlib.image.image_readers import MRCImageReader
 from pwem.objects import VolumeMask, Volume
 from pwem.protocols import EMProtocol
+from pytom_tm import Plugin
 from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
     TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, BASE_SEED
 from pytom_tm.objects import SetOfPytomScoreTomograms
@@ -409,7 +410,8 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.error(traceback.format_exc())
 
     def templateMatchingStep(self, tsId: str):
-        pass
+        Plugin.runPytom(self, self._program, self._generateArguments(tsId))
+
 
     def createOutputStep(self, tsId: str):
         pass

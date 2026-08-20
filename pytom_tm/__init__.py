@@ -63,7 +63,7 @@ class Plugin(pwem.Plugin):
         return neededProgs
 
     @classmethod
-    def runGapStop(cls, protocol, program, args, cwd=None, numberOfMpi=1):
+    def runPytom(cls, protocol, program, args, cwd=None, numberOfMpi=1):
         """ Run pytom command from a given protocol. """
         cmd = cls.getCondaActivationCmd() + " "
         cmd += cls.getPyTomEnvActivation()
