@@ -565,8 +565,8 @@ class ProtPytomTemplateMatching(EMProtocol):
             f'--volume-split {self.volume_split.get()}',
             f'--tilt-angles {self._getInputFileName(tsId, TILT_ANGLES_EXT)}',
             f'--voxel-size-angstrom {self.samplingRate:.3f}',
-            f'--dose-accumulation {self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)}'
-            f'--defocus {self._getInputFileName(tsId, DEFOCUS_EXT)}'
+            f'--dose-accumulation {self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)}',
+            f'--defocus {self._getInputFileName(tsId, DEFOCUS_EXT)}',
             f'--amplitude-contrast {acquisition.getAmplitudeContrast()}',
             f'--spherical-aberration {acquisition.getSphericalAberration()}',
             f'--voltage {acquisition.getVoltage()}',
