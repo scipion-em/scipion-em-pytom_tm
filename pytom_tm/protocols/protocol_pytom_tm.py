@@ -553,6 +553,8 @@ class ProtPytomTemplateMatching(EMProtocol):
         tomo = self.tomoDict[tsId]
         ctfCorrected = tomo.ctfCorrected()
 
+        gpu = ' '.join(self.getGpuList())
+
         cmd = [
             f'--template {self.getReferenceFileName()}',
             f'--tomogram {self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)}',
@@ -568,7 +570,7 @@ class ProtPytomTemplateMatching(EMProtocol):
             f'--amplitude-contrast {acquisition.getAmplitudeContrast()}',
             f'--spherical-aberration {acquisition.getSphericalAberration()}',
             f'--voltage {acquisition.getVoltage()}',
-            f'--gpu-ids {self.getGpuList()}',
+            f'--gpu-ids {gpu}',
             '--log INF0'
 
         ]
