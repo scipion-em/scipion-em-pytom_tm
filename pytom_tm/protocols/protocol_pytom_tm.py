@@ -562,7 +562,7 @@ class ProtPytomTemplateMatching(EMProtocol):
             f'--mask {self.getMaskFileName()}',
             f'--angular-search {self.getAngularStep()}',
             f'--z-axis-rotational-symmetry {self.z_axis_rotational_symmetry.get()}',
-            f'--volume-split" {self.volume_split.get()}',
+            f'--volume-split {self.volume_split.get()}',
             f'--tilt-angles {self._getInputFileName(tsId, TILT_ANGLES_EXT)}',
             f'--voxel-size-angstrom {self.samplingRate:.3f}',
             f'--dose-accumulation {self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)}'
