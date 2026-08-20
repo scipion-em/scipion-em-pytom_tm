@@ -553,7 +553,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         tomo = self.tomoDict[tsId]
         ctfCorrected = tomo.ctfCorrected()
 
-        gpu = ' '.join(self.getGpuList())
+        gpu = ' '.join([str(el) for el in self.getGpuList()])
 
         cmd = [
             f'--template {self.getReferenceFileName()}',
