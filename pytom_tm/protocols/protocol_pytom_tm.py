@@ -45,7 +45,7 @@ from pytom_tm.objects import SetOfPytomScoreTomograms
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
-    EnumParam, GT
+    EnumParam, GT, GPU_LIST
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
 from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks, TiltSeries, TiltImage
 from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, \
@@ -273,6 +273,10 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "--half-precision \n"
                            "--warp-xml-file \n")
 
+        form.addHidden(GPU_LIST, StringParam,
+                       default='0',
+                       label="Choose GPU IDs",
+                       help="")
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         # FRANCESCA
@@ -632,4 +636,5 @@ class ProtPytomTemplateMatching(EMProtocol):
            """
         h = int(hashlib.sha256(tsId.encode()).hexdigest(), 16)
         return (base_seed + h) % (2 ** 31 - 1)
+
 
