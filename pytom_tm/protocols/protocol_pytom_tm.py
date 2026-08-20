@@ -547,8 +547,8 @@ class ProtPytomTemplateMatching(EMProtocol):
         ts = self.tsDict[tsId]
         acquisition = ts.getAcquisition()
 
-        ctf = self.ctfDict[tsId]
-        phaseShift = ctf.getPhaseShift()
+        # ctf = self.ctfDict[tsId]
+        # phaseShift = ctf.getPhaseShift()
 
         tomo = self.tomoDict[tsId]
         ctfCorrected = tomo.ctfCorrected()
@@ -594,8 +594,8 @@ class ProtPytomTemplateMatching(EMProtocol):
         if hpf:
             cmd.append(f'--high-pass {hpf:.2f}')
 
-        if phaseShift:
-            cmd.append(f'--phase-shift {phaseShift}')
+        # if phaseShift:
+        #     cmd.append(f'--phase-shift {phaseShift}')
 
         if ctfCorrected:
             cmd.append('--tomogram-ctf-model phase-flip')
