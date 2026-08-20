@@ -571,7 +571,7 @@ class ProtPytomTemplateMatching(EMProtocol):
             f'--spherical-aberration {acquisition.getSphericalAberration()}',
             f'--voltage {acquisition.getVoltage()}',
             f'--gpu-ids {gpu}',
-            '--log INF0'
+            '--log info'
 
         ]
         if x_min:
