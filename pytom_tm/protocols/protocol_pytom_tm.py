@@ -280,16 +280,16 @@ class ProtPytomTemplateMatching(EMProtocol):
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         # FRANCESCA
-        import os
-        fname = "/home/francesa/test_FC.txt"
-        if os.path.exists(fname):
-            os.remove(fname)
-        with open(fname, "a+") as fjj:
-            fjj.write(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
-            print(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
-        import time
-        time.sleep(10)
-        # FRANCESCA_END
+        # import os
+        # fname = "/home/francesa/test_FC.txt"
+        # if os.path.exists(fname):
+        #     os.remove(fname)
+        # with open(fname, "a+") as fjj:
+        #     fjj.write(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
+        #     print(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
+        # import time
+        # time.sleep(10)
+        # # FRANCESCA_END
 
         self._initialize()
         closeSetStepDeps = []
