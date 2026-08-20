@@ -603,7 +603,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         if self.volume_split.get() != '1 1 1':
             cmd.append(f'--defocus-handedness {self.defocus_handedness.get()}')
 
-        if self.spectral_withening.get():
+        if self.spectral_whitening.get():
             cmd.append(f'--spectral-withening')
 
         if self.random_phase_correction.get():
