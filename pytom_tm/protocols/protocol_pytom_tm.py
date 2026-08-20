@@ -558,7 +558,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         cmd = [
             f'--template {self.getReferenceFileName()}',
             f'--tomogram {self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)}',
-            f'--destination {self._getOutputFileName(tsId)}',
+            f'--destination {self._getCurrentTomoDir(tsId)}',
             f'--mask {self.getMaskFileName()}',
             f'--angular-search {self.getAngularStep()}',
             f'--z-axis-rotational-symmetry {self.z_axis_rotational_symmetry.get()}',
