@@ -27,3 +27,11 @@ DOSE_EXT = '.txt'
 TOMO_SUFFIX = '_tomo'
 MASK_SUFFIX = '_tomoMask'
 DOSE_SUFFIX = '_dose'
+
+#defocus handedness
+DEFOCUS_HAND_NEG = -1
+DEFOCUS_HAND_POS = 1
+DEFOCUS_HAND_OFF = 0
+
+#base seed
+BASE_SEED=42

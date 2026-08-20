@@ -24,6 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import hashlib
 import logging
 import os
 import traceback
@@ -39,7 +40,7 @@ from pwem.emlib.image.image_readers import MRCImageReader
 from pwem.objects import VolumeMask, Volume
 from pwem.protocols import EMProtocol
 from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
-    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX
+    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, BASE_SEED
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String
@@ -153,12 +154,12 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "Format is x y z, e.g. --volume-split 1 2 1")
 
         form.addParam('defocus_handedness', EnumParam,
-                      choices=['-1', '0', '1'],
+                      choices=[DEFOCUS_HAND_NEG, DEFOCUS_HAND_OFF, DEFOCUS_HAND_POS],
                       display=EnumParam.DISPLAY_HLIST,
                       label='Defocus Handedness',
                       expertLevel=LEVEL_ADVANCED,
-                      default=0,
-                      # condition='sum(map(int, volume_split)) > 3',  #  TODO
+                      default=DEFOCUS_HAND_OFF,
+                      condition='volume_split != "1 1 1"',
                       help="Specify the defocus handedness for defocus gradient correction of the "
                            "CTF in each subvolumes. The more subvolumes in x and z, "
                            "the finer the defocus gradient will be corrected, at the cost of "
@@ -241,7 +242,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                       help="Calculate a whitening filtering from the power spectrum of the tomogram; "
                            "apply it to the tomogram patch and template. Effectively puts more weight on "
                            "high resolution features and sharpens the correlation peaks.")
-        form.AddParam('per_tilt_weighting',BooleanParam,
+        form.AddParam('per_tilt_weighting', BooleanParam,
                       label='per-tilt-weighting',
                       default=True,
                       expertLevel=LEVEL_ADVANCED,
@@ -257,6 +258,13 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "the template, and subtract this 'noise' map from the final score map. "
                            "For this method please see STOPGAP as a reference: "
                            "https://doi.org/10.1107/S205979832400295X ."
+                      )
+        form.AddParam('rng_seed', IntParam,
+                      label='Phase randomization range seed',
+                      allowsNull=True,
+                      condition='random_phase_correction',
+                      help="Specify a seed for the random number generator used for phase "
+                           "randomization for consistent results! If empty a random number will be provided.",
                       )
         form.addParam('extraParams', StringParam,
                       label='Additional parameters',
@@ -418,7 +426,6 @@ class ProtPytomTemplateMatching(EMProtocol):
         z_min = self.zmin.get()
         z_max = self.zmax.get()
 
-
         if not self.validate_volume_split(self.volume_split.get()):
             valMsg.append('Volume split must be a list of three integers (e.g. 1 1 1)')
 
@@ -428,16 +435,15 @@ class ProtPytomTemplateMatching(EMProtocol):
             elif lpf <= hpf:
                 valMsg.append('Low pass filter value must be greater than high pass filter value')
 
-        iter = [(x_min,x_max),(y_min,y_max),(z_min,z_max)]
+        iter = [(x_min, x_max), (y_min, y_max), (z_min, z_max)]
         for pair in iter:
-            self.check_search_values(pair[0], pair[1],valMsg)
-
+            self.check_search_values(pair[0], pair[1], valMsg)
 
         return valMsg
 
         # --------------------------- UTILS functions ------------------------------
 
-    def check_search_values(self, val1: Optional[int], val2: Optional[int], errorList:List[str]) -> None:
+    def check_search_values(self, val1: Optional[int], val2: Optional[int], errorList: List[str]) -> None:
         if val1 is None and val2 is None:
             return
         if val1 is None or val2 is None:
@@ -445,7 +451,6 @@ class ProtPytomTemplateMatching(EMProtocol):
             return
         if val1 > val2:
             errorList.append('min value must be less than max value.')
-
 
     @staticmethod
     def validate_volume_split(text: str) -> bool:
@@ -510,21 +515,17 @@ class ProtPytomTemplateMatching(EMProtocol):
             os.fsync(f.fileno())  # Empty system buffer
 
     def getAngularStep(self) -> float:
-        angular_search= self.angular_search.get()
+        angular_search = self.angular_search.get()
         if angular_search:
             return angular_search
         else:
             low_pass = self.low_pass.get()
-            x,y,z, _ = MRCImageReader.getDimensions(self.getReferenceFileName())
-            particle_diameter = max(x,y,z)
+            x, y, z, _ = MRCImageReader.getDimensions(self.getReferenceFileName())
+            particle_diameter = max(x, y, z)
             max_res = max(
                 2 * self.samplingRate, low_pass if low_pass is not None else 0
             )
             return np.rad2deg(max_res / particle_diameter)
-
-
-
-
 
     def _generateArguments(self, tsId: str) -> str:
         x_min = self.xmin.get()
@@ -540,7 +541,11 @@ class ProtPytomTemplateMatching(EMProtocol):
         ts = self.tsDict[tsId]
         acquisition = ts.getAcquisition()
 
+        ctf = self.ctfDict[tsId]
+        phaseShift = ctf.getPhaseShift()
 
+        tomo = self.tomoDict[tsId]
+        ctfCorrected = tomo.ctfCorrected()
 
         cmd = [
             f'--template {self.getReferenceFileName()}',
@@ -557,9 +562,8 @@ class ProtPytomTemplateMatching(EMProtocol):
             f'--amplitude-contrast {acquisition.getAmplitudeContrast()}',
             f'--spherical-aberration {acquisition.getSphericalAberration()}',
             f'--voltage {acquisition.getVoltage()}',
-            # f'--phase-shift {acquisition.getPhaseShift()}',
-
-
+            f'--gpu-ids {self.getGpuList()}',
+            '--log INF0'
 
         ]
         if x_min:
@@ -584,7 +588,48 @@ class ProtPytomTemplateMatching(EMProtocol):
         if hpf:
             cmd.append(f'--high-pass {hpf:.2f}')
 
+        if phaseShift:
+            cmd.append(f'--phase-shift {phaseShift}')
+
+        if ctfCorrected:
+            cmd.append('--tomogram-ctf-model phase-flip')
+
+        if self.volume_split.get() != '1 1 1':
+            cmd.append(f'--defocus-handedness {self.defocus_handedness.get()}')
+
+        if self.spectral_withening.get():
+            cmd.append(f'--spectral-withening')
+
+        if self.random_phase_correction.get():
+            cmd.append('--random-phase-correction')
+
+            rng_seed = self.rng_seed.get()
+            rng_seed = rng_seed if rng_seed else self.seed_from_name(tsId)
+            cmd.append(f'--rng-seed {rng_seed}')
 
 
 
         return ' '.join(cmd)
+
+    @staticmethod
+    def seed_from_name(tsId: str, base_seed: int = BASE_SEED) -> int:
+        """Derive a deterministic per-tomogram seed from a base seed and a name.
+
+           Hashes ``name`` (e.g. a tomogram filename) with SHA-256 and combines it
+           with ``base_seed`` to produce a reproducible integer seed for the random
+           number generator used in phase randomization. This ensures each
+           tomogram gets its own independent noise map, while remaining
+           deterministic across runs regardless of processing order.
+
+           Args:
+               base_seed: Fixed base seed for reproducibility across runs.
+               tsId: Unique identifier for the tomogram (e.g. filename), used to
+                   derive a distinct seed.
+
+           Returns:
+               An integer seed in the range [0, 2**31 - 2], suitable for
+               ``numpy.random.default_rng`` or similar RNG constructors.
+           """
+        h = int(hashlib.sha256(tsId.encode()).hexdigest(), 16)
+        return (base_seed + h) % (2 ** 31 - 1)
+
