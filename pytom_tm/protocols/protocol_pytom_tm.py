@@ -242,7 +242,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                       help="Calculate a whitening filtering from the power spectrum of the tomogram; "
                            "apply it to the tomogram patch and template. Effectively puts more weight on "
                            "high resolution features and sharpens the correlation peaks.")
-        form.AddParam('per_tilt_weighting', BooleanParam,
+        form.addParam('per_tilt_weighting', BooleanParam,
                       label='per-tilt-weighting',
                       default=True,
                       expertLevel=LEVEL_ADVANCED,
@@ -259,7 +259,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "For this method please see STOPGAP as a reference: "
                            "https://doi.org/10.1107/S205979832400295X ."
                       )
-        form.AddParam('rng_seed', IntParam,
+        form.addParam('rng_seed', IntParam,
                       label='Phase randomization range seed',
                       allowsNull=True,
                       condition='random_phase_correction',
