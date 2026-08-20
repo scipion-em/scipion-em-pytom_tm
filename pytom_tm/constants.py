@@ -25,5 +25,5 @@ DOSE_EXT = '.txt'
 
 #suffix
 TOMO_SUFFIX = '_tomo'
-MAS_SUFFIX = '_tomoMask'
+MASK_SUFFIX = '_tomoMask'
 DOSE_SUFFIX = '_dose'

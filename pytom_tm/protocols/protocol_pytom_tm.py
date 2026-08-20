@@ -44,7 +44,7 @@ from pytom_tm.objects import SetOfPytomScoreTomograms
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
-    EnumParam
+    EnumParam, GT
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
 from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks, TiltSeries, TiltImage
 from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, \
@@ -139,6 +139,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                       label='Z Axis Rotational Symmetry',
                       default=1,
                       allowsNull=False,
+                      validators=[GT(0)],
                       help="Integer value indicating the rotational symmetry of the template around "
                            "the z-axis. The length of the rotation search will be shortened through "
                            "division by this value. Only works for template symmetry around the z-axis.")
@@ -240,6 +241,13 @@ class ProtPytomTemplateMatching(EMProtocol):
                       help="Calculate a whitening filtering from the power spectrum of the tomogram; "
                            "apply it to the tomogram patch and template. Effectively puts more weight on "
                            "high resolution features and sharpens the correlation peaks.")
+        form.AddParam('per_tilt_weighting',BooleanParam,
+                      label='per-tilt-weighting',
+                      default=True,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Flag to activate per-tilt-weighting. The base functionality creates a fanned wedge where each tilt is "
+                           "weighted by cos(tilt_angle)."
+                      )
 
         form.addSection(label='Additional Parameters')
         form.addParam('random_phase_correction', BooleanParam,
@@ -389,7 +397,7 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.error(traceback.format_exc())
 
     def templateMatchingStep(self, tsId: str):
-        pa
+        pass
 
     def createOutputStep(self, tsId: str):
         pass
@@ -403,9 +411,13 @@ class ProtPytomTemplateMatching(EMProtocol):
         valMsg = []
         lpf = self.low_pass.get()
         hpf = self.high_pass.get()
+        x_min = self.xmin.get()
+        x_max = self.xmax.get()
+        y_min = self.ymin.get()
+        y_max = self.ymax.get()
+        z_min = self.zmin.get()
+        z_max = self.zmax.get()
 
-        if self.z_axis_rotational_symmetry.get() < 0:
-            valMsg.append('Z axis rotational symmetry must be >= 0')
 
         if not self.validate_volume_split(self.volume_split.get()):
             valMsg.append('Volume split must be a list of three integers (e.g. 1 1 1)')
@@ -414,11 +426,26 @@ class ProtPytomTemplateMatching(EMProtocol):
             if lpf <= 0 or hpf <= 0:
                 valMsg.append('Low and high pass filter must be >= 0')
             elif lpf <= hpf:
-                valMsg.append('Low pass filter value must be higher than high pass filter value')
+                valMsg.append('Low pass filter value must be greater than high pass filter value')
+
+        iter = [(x_min,x_max),(y_min,y_max),(z_min,z_max)]
+        for pair in iter:
+            self.check_search_values(pair[0], pair[1],valMsg)
+
 
         return valMsg
 
         # --------------------------- UTILS functions ------------------------------
+
+    def check_search_values(self, val1: Optional[int], val2: Optional[int], errorList:List[str]) -> None:
+        if val1 is None and val2 is None:
+            return
+        if val1 is None or val2 is None:
+            errorList.append('If min value is filled, max value must also be filled and viceversa.')
+            return
+        if val1 > val2:
+            errorList.append('min value must be less than max value.')
+
 
     @staticmethod
     def validate_volume_split(text: str) -> bool:
@@ -495,14 +522,69 @@ class ProtPytomTemplateMatching(EMProtocol):
             )
             return np.rad2deg(max_res / particle_diameter)
 
+
+
+
+
     def _generateArguments(self, tsId: str) -> str:
+        x_min = self.xmin.get()
+        x_max = self.xmax.get()
+        y_min = self.ymin.get()
+        y_max = self.ymax.get()
+        z_min = self.zmin.get()
+        z_max = self.zmax.get()
+
+        lpf = self.low_pass.get()
+        hpf = self.high_pass.get()
+
+        ts = self.tsDict[tsId]
+        acquisition = ts.getAcquisition()
+
+
+
         cmd = [
             f'--template {self.getReferenceFileName()}',
             f'--tomogram {self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)}',
             f'--destination {self._getOutputFileName(tsId)}',
             f'--mask {self.getMaskFileName()}',
-            f'--non-spherical-mask {self.non_spherical_mask.get()}',
             f'--angular-search {self.getAngularStep()}',
+            f'--z-axis-rotational-symmetry {self.z_axis_rotational_symmetry.get()}',
+            f'--volume-split" {self.volume_split.get()}',
+            f'--tilt-angles {self._getInputFileName(tsId, TILT_ANGLES_EXT)}',
+            f'--voxel-size-angstrom {self.samplingRate:.3f}',
+            f'--dose-accumulation {self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)}'
+            f'--defocus {self._getInputFileName(tsId, DEFOCUS_EXT)}'
+            f'--amplitude-contrast {acquisition.getAmplitudeContrast()}',
+            f'--spherical-aberration {acquisition.getSphericalAberration()}',
+            f'--voltage {acquisition.getVoltage()}',
+            # f'--phase-shift {acquisition.getPhaseShift()}',
+
+
 
         ]
+        if x_min:
+            cmd.append(f'--search-x {x_min} {x_max}')
+        if y_min:
+            cmd.append(f'--search-y {y_min} {y_max}')
+        if z_min:
+            cmd.append(f'--search-z {z_min} {z_max}')
+
+        if self.tomoMaskDict:
+            cmd.append(f'--tomogram-mask {self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)}')
+
+        if self.non_spherical_mask.get():
+            cmd.append('--non-spherical-mask')
+
+        if self.per_tilt_weighting.get():
+            cmd.append('--per-tilt-weighting')
+
+        if lpf:
+            cmd.append(f'--low-pass {lpf:.2f}')
+
+        if hpf:
+            cmd.append(f'--high-pass {hpf:.2f}')
+
+
+
+
         return ' '.join(cmd)
