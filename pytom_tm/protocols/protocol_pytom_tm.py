@@ -36,15 +36,17 @@ from typing import List, Optional, Union
 import numpy as np
 from fidder.protocols.protocol_detect_and_erase_fiducials import MASK_SUFFIX
 
+from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image.image_readers import MRCImageReader
 from pwem.objects import VolumeMask, Volume
 from pwem.protocols import EMProtocol
 from pytom_tm import Plugin
 from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
-    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, BASE_SEED
-from pytom_tm.objects import SetOfPytomScoreTomograms
+    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, \
+    BASE_SEED, SCORE_SUFFIX
+from pytom_tm.objects import SetOfPytomScoreTomograms, PytomScoreTomogram
 from pyworkflow import BETA
-from pyworkflow.object import Pointer, String
+from pyworkflow.object import Pointer, String, Set
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
     EnumParam, GT, GPU_LIST
 from pyworkflow.utils import Message, cyanStr, makePath, redStr
@@ -79,6 +81,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         self.failedTsIds = []
         self.failedTsIdsStr = String()
         self.samplingRate = -1
+
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -278,6 +281,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                        default='0',
                        label="Choose GPU IDs",
                        help="")
+
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         # FRANCESCA
@@ -410,14 +414,51 @@ class ProtPytomTemplateMatching(EMProtocol):
             logger.error(traceback.format_exc())
 
     def templateMatchingStep(self, tsId: str):
-        Plugin.runPytom(self, self._program, self._generateArguments(tsId))
+        if tsId in self.failedTsIds:
+            return
+        try:
+            logger.info(cyanStr(f'===> tsId = {tsId}: performing the template matching...'))
+            Plugin.runPytom(self, self._program, self._generateArguments(tsId))
 
+        except Exception as e:
+            self.failedTsIds.append(tsId)
+            logger.error(redStr(f'tsId = {tsId} -> pytom execution failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
 
     def createOutputStep(self, tsId: str):
-        pass
+        if tsId in self.failedTsIds:
+            return
+        try:
+
+            tomo = self.tomoDict[tsId]
+            scoresMap = self._getOutputFileName(tsId, suffix=SCORE_SUFFIX)
+            setMRCSamplingRate(scoresMap, tomo.getSamplingRate())  # Update the apix value in file header
+            scoreTomoSet = self.createOutputSet()
+            # Create the corresponding scoreTomo
+            scoreTomo = PytomScoreTomogram()
+            scoreTomo.copyInfo(tomo)
+            scoreTomo.setFileName(scoresMap)
+            scoreTomo.setTomoFile(tomo.getFileName())
+            # Append to the set and store
+            scoreTomoSet.append(scoreTomo)
+            scoreTomoSet.write()
+            self._store(scoreTomoSet)
+
+        except Exception as e:
+            logger.error(redStr(f'tsId = {tsId} -> Unable to register the output with exception {e}. Skipping... '))
+            logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self):
-        pass
+        scoreTomoSet = getattr(self, self._possibleOutputs.scoreTomograms.name, None)
+        if scoreTomoSet:
+            self._closeOutputSet()
+        else:
+            raise Exception('No Pytom scored tomograms were generated. Maybe the tomograms are too large '
+                            'for the GPU/s used. Consider to bin them before and/or make tiles from the '
+                            'tomogram using the parameter Volume Split.')
+        if self.failedTsIds:
+            self.failedTsIdsStr.set(str(self.failedTsIds))
+            self._store(self.failedTsIdsStr)
 
     # --------------------------- INFO functions ------------------------------
 
@@ -446,6 +487,16 @@ class ProtPytomTemplateMatching(EMProtocol):
             self.check_search_values(pair[0], pair[1], valMsg)
 
         return valMsg
+
+    def _summary(self) -> List[str]:
+        msg = []
+        if self.isFinished():
+            msg.append('*Pytom_TM is composed of 2 steps*. To extract the coordinates from the scored '
+                       'tomograms calculated, call the protocol *pytom - extract coordinates*.')
+            failedStrs = self.failedTsIdsStr.get()
+            if failedStrs:
+                msg.append(f'The following tsIds were not possible to be processed: *{failedStrs}*')
+        return msg
 
         # --------------------------- UTILS functions ------------------------------
 
@@ -501,8 +552,8 @@ class ProtPytomTemplateMatching(EMProtocol):
     def _getInputFileName(self, tsId: str, ext: str, suffix: str = '') -> str:
         return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{ext}')
 
-    def _getOutputFileName(self, tsId: str) -> str:
-        return self._getInputFileName(tsId, MRC_EXT)
+    def _getOutputFileName(self, tsId: str, suffix: str = '') -> str:
+        return self._getInputFileName(tsId, MRC_EXT, suffix=suffix)
 
     def generateDoseFile(self,
                          ts: TiltSeries,
@@ -615,8 +666,6 @@ class ProtPytomTemplateMatching(EMProtocol):
             rng_seed = rng_seed if rng_seed else self.seed_from_name(tsId)
             cmd.append(f'--rng-seed {rng_seed}')
 
-
-
         return ' '.join(cmd)
 
     @staticmethod
@@ -641,4 +690,18 @@ class ProtPytomTemplateMatching(EMProtocol):
         h = int(hashlib.sha256(tsId.encode()).hexdigest(), 16)
         return (base_seed + h) % (2 ** 31 - 1)
 
+    def createOutputSet(self) -> SetOfPytomScoreTomograms:
+        scoreTomoSet = getattr(self, self._possibleOutputs.scoreTomograms.name, None)
+        if scoreTomoSet:
+            scoreTomoSet.enableAppend()
+        else:
+            inTomosPointer = self._getFormAttrib(IN_TOMOS, returnPointer=True)
+            inTomos = inTomosPointer.get()
+            scoreTomoSet = SetOfPytomScoreTomograms.create(self._getPath(), template="scoreTomograms%s")
+            scoreTomoSet.copyInfo(inTomos)
+            scoreTomoSet.setStreamState(Set.STREAM_OPEN)
 
+            self._defineOutputs(**{self._possibleOutputs.scoreTomograms.name: scoreTomoSet})
+            self._defineSourceRelation(inTomosPointer, scoreTomoSet)
+
+        return scoreTomoSet

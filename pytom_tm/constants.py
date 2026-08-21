@@ -27,6 +27,7 @@ DOSE_EXT = '.txt'
 TOMO_SUFFIX = '_tomo'
 MASK_SUFFIX = '_tomoMask'
 DOSE_SUFFIX = '_dose'
+SCORE_SUFFIX = '_tomo_scores'
 
 #defocus handedness
 DEFOCUS_HAND_NEG = -1
