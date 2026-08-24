@@ -43,7 +43,7 @@ from pwem.protocols import EMProtocol
 from pytom_tm import Plugin
 from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
     TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, \
-    BASE_SEED, SCORE_SUFFIX
+    BASE_SEED, SCORE_SUFFIX, JSON_EXT, JSON_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms, PytomScoreTomogram
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String, Set
@@ -81,7 +81,6 @@ class ProtPytomTemplateMatching(EMProtocol):
         self.failedTsIds = []
         self.failedTsIdsStr = String()
         self.samplingRate = -1
-
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -432,6 +431,7 @@ class ProtPytomTemplateMatching(EMProtocol):
 
             tomo = self.tomoDict[tsId]
             scoresMap = self._getOutputFileName(tsId, suffix=SCORE_SUFFIX)
+            jsonFile = self._getOutputFileName(tsId, ext=JSON_EXT, suffix=JSON_SUFFIX)
             setMRCSamplingRate(scoresMap, tomo.getSamplingRate())  # Update the apix value in file header
             scoreTomoSet = self.createOutputSet()
             # Create the corresponding scoreTomo
@@ -439,6 +439,8 @@ class ProtPytomTemplateMatching(EMProtocol):
             scoreTomo.copyInfo(tomo)
             scoreTomo.setFileName(scoresMap)
             scoreTomo.setTomoFile(tomo.getFileName())
+            scoreTomo.setJsonFile(jsonFile)
+
             # Append to the set and store
             scoreTomoSet.append(scoreTomo)
             scoreTomoSet.write()
@@ -552,8 +554,8 @@ class ProtPytomTemplateMatching(EMProtocol):
     def _getInputFileName(self, tsId: str, ext: str, suffix: str = '') -> str:
         return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{ext}')
 
-    def _getOutputFileName(self, tsId: str, suffix: str = '') -> str:
-        return self._getInputFileName(tsId, MRC_EXT, suffix=suffix)
+    def _getOutputFileName(self, tsId: str, ext: str = MRC_EXT, suffix: str = '') -> str:
+        return self._getInputFileName(tsId, ext=ext, suffix=suffix)
 
     def generateDoseFile(self,
                          ts: TiltSeries,
@@ -640,13 +642,14 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         if self.per_tilt_weighting.get():
             cmd.append('--per-tilt-weighting')
+        # TODO
+        # if lpf:
+        #     cmd.append(f'--low-pass {lpf:.2f}')
+        #
+        # if hpf:
+        #     cmd.append(f'--high-pass {hpf:.2f}')
 
-        if lpf:
-            cmd.append(f'--low-pass {lpf:.2f}')
-
-        if hpf:
-            cmd.append(f'--high-pass {hpf:.2f}')
-
+        # TODO
         # if phaseShift:
         #     cmd.append(f'--phase-shift {phaseShift}')
 

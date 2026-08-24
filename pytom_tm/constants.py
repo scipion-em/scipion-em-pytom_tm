@@ -22,12 +22,14 @@ MRC_EXT = '.mrc'
 DEFOCUS_EXT = '.defocus'
 TILT_ANGLES_EXT = '.tlt'
 DOSE_EXT = '.txt'
+JSON_EXT = '.json'
 
 #suffix
 TOMO_SUFFIX = '_tomo'
 MASK_SUFFIX = '_tomoMask'
 DOSE_SUFFIX = '_dose'
 SCORE_SUFFIX = '_tomo_scores'
+JSON_SUFFIX = '_tomo_job'
 
 #defocus handedness
 DEFOCUS_HAND_NEG = -1
