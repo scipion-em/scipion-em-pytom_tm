@@ -1,2 +1,4 @@
+from pytom_tm.protocols.protocol_extract_coordinates import ProtPytomExtractCoordinates
 from pytom_tm.protocols.protocol_pytom_tm import ProtPytomTemplateMatching
+
 

@@ -49,10 +49,10 @@ from pyworkflow import BETA
 from pyworkflow.object import Pointer, String, Set
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
     EnumParam, GT, GPU_LIST
-from pyworkflow.utils import Message, cyanStr, makePath, redStr
+from pyworkflow.utils import Message, cyanStr, makePath, redStr, yellowStr
 from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks, TiltSeries, TiltImage
 from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, \
-    getTsIdsIntersection, getTsIdsDicts, invertContrast, convertOrLink, genDefocusFileFromScipion
+    getTsIdsIntersection, getTsIdsDicts, invertContrast, convertOrLink, genDefocusFileFromScipion, check_sr_and_size
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +131,7 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         form.addSection(label='Angular Search')
         form.addParam('angular_search', FloatParam,
-                      label='Angular Search (deg)',
-                      important=True,
+                      label='Angular Search [deg] (opt.)',
                       default=7.,
                       allowsNull=True,
                       help="Angular increment of template search. "
@@ -180,12 +179,12 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         x_index.addParam('xmin',
                          IntParam,
-                         label='X min',
+                         label='X min (opt.)',
                          allowsNull=True)
 
         x_index.addParam('xmax',
                          IntParam,
-                         label='X max',
+                         label='X max (opt.)',
                          allowsNull=True)
 
         y_index = search_indices_group.addLine('Y axis',
@@ -193,12 +192,12 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         y_index.addParam('ymin',
                          IntParam,
-                         label='Y min',
+                         label='Y min (opt.)',
                          allowsNull=True)
 
         y_index.addParam('ymax',
                          IntParam,
-                         label='Y max',
+                         label='Y max (opt.)',
                          allowsNull=True)
 
         z_index = search_indices_group.addLine('Z axis',
@@ -206,17 +205,17 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         z_index.addParam('zmin',
                          IntParam,
-                         label='Z min',
+                         label='Z min (opt.)',
                          allowsNull=True)
 
         z_index.addParam('zmax',
                          IntParam,
-                         label='Z max',
+                         label='Z max (opt.)',
                          allowsNull=True)
 
         form.addParam(TOMO_MASKS, PointerParam,
                       pointerClass=SetOfTomoMasks,
-                      label='Tomogram masks (segmentations)',
+                      label='Tomogram masks (segmentations, opt.)',
                       allowsNull=True,
                       help="Here you can provide a set of masks for matching with dimensions (in pixels) "
                            "equal to the tomogram. If a subvolume only has values <= 0 for this mask it "
@@ -225,14 +224,14 @@ class ProtPytomTemplateMatching(EMProtocol):
 
         form.addSection(label='Filter Control')
         form.addParam('low_pass', FloatParam,
-                      label='Low Pass filter ',
+                      label='Low Pass filter (opt.) ',
                       allowsNull=True,
                       help="Apply a low-pass filter to the tomogram and template. Generally desired "
                            "if the template was already filtered to a certain resolution. "
                            "Value is the resolution in A."
                       )
         form.addParam('high_pass', FloatParam,
-                      label='High Pass filter ',
+                      label='High Pass filter (opt.) ',
                       allowsNull=True,
                       help="Apply a high-pass filter to the tomogram and template to reduce "
                            "correlation with large low frequency variations. Value is a resolution in A, "
@@ -263,7 +262,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "https://doi.org/10.1107/S205979832400295X ."
                       )
         form.addParam('rng_seed', IntParam,
-                      label='Phase randomization range seed',
+                      label='Phase randomization range seed (opt.)',
                       allowsNull=True,
                       condition='random_phase_correction',
                       help="Specify a seed for the random number generator used for phase "
@@ -347,6 +346,7 @@ class ProtPytomTemplateMatching(EMProtocol):
 
     def convertReferenceStep(self):
         logger.info(cyanStr(f"Converting the reference in the required format...'"))
+
         try:
             # Convert or link the reference
             ref = self._getFormAttrib(REF_VOL)
@@ -366,26 +366,40 @@ class ProtPytomTemplateMatching(EMProtocol):
             samplingRate = mask.getSamplingRate()
             convertOrLink(inMaskFile, outMaskFile, samplingRate)
 
+
         except Exception as e:
             raise Exception(f'Reference conversion failed with the exception -> {e}')
 
     def convertInputStep(self, tsId: str):
 
         try:
+
             tsDir = self._getCurrentTomoDir(tsId)
             tsTmpDir = self._getCurrentTomoTmpDir(tsId)
             makePath(tsDir, tsTmpDir)
-
             tomo = self.tomoDict[tsId]
-            inTomoFile = tomo.getFileName()
-            outTomoFile = self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)
-            convertOrLink(inTomoFile, outTomoFile, samplingRate=tomo.getSamplingRate())
 
             if self.tomoMaskDict:
                 tomomask = self.tomoMaskDict[tsId]
+                msg = check_sr_and_size(tomo, tomomask)
+                if msg:
+                    self.failedTsIds.append(tsId)
+                    logger.info(yellowStr(f'tsId = {tsId} -> {msg}'))
+                    return
+                mask = self._getFormAttrib(IN_MASK)
+                msg = check_sr_and_size(mask, tomomask, check_size=False)
+                if msg:
+                    self.failedTsIds.append(tsId)
+                    logger.info(yellowStr(f'tsId = {tsId} -> {msg}'))
+                    return
+
                 inTomoMaskFile = tomomask.getFileName()
                 outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
                 convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=tomo.getSamplingRate())
+
+            inTomoFile = tomo.getFileName()
+            outTomoFile = self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)
+            convertOrLink(inTomoFile, outTomoFile, samplingRate=tomo.getSamplingRate())
 
             ts = self.tsDict[tsId]
             ctf = self.ctfDict[tsId]
@@ -474,6 +488,8 @@ class ProtPytomTemplateMatching(EMProtocol):
         y_max = self.ymax.get()
         z_min = self.zmin.get()
         z_max = self.zmax.get()
+        ref = self._getFormAttrib(REF_VOL)
+        ref_mask = self._getFormAttrib(IN_MASK)
 
         if not self.validate_volume_split(self.volume_split.get()):
             valMsg.append('Volume split must be a list of three integers (e.g. 1 1 1)')
@@ -487,6 +503,10 @@ class ProtPytomTemplateMatching(EMProtocol):
         iter = [(x_min, x_max), (y_min, y_max), (z_min, z_max)]
         for pair in iter:
             self.check_search_values(pair[0], pair[1], valMsg)
+
+        msg = check_sr_and_size(ref, ref_mask, check_size=True)
+        if msg:
+            valMsg.append(msg)
 
         return valMsg
 

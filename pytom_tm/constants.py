@@ -1,3 +1,5 @@
+from gapstop.constants import IN_SCORE_TOMOS
+
 PYTOM_TM = 'pytom_tm'
 PYTOM_TM_HOME = 'PYTOM_TM_HOME'
 
@@ -38,3 +40,6 @@ DEFOCUS_HAND_OFF = 0
 
 #base seed
 BASE_SEED=42
+
+#---------- EXTRACT PARTICLES------------
+IN_TM_PROTOCOL ='inTmProtocol'
