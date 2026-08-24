@@ -469,9 +469,11 @@ class ProtPytomTemplateMatching(EMProtocol):
         if scoreTomoSet:
             self._closeOutputSet()
         else:
-            raise Exception('No Pytom scored tomograms were generated. Maybe the tomograms are too large '
-                            'for the GPU/s used. Consider to bin them before and/or make tiles from the '
-                            'tomogram using the parameter Volume Split.')
+            raise Exception('No Pytom scored tomograms were generated. Possible causes:\n\n'
+                            '1) Maybe the tomograms are too large for the GPU/s used. '
+                            'Consider to bin them before and/or make tiles from the '
+                            'tomogram using the parameter Volume Split.\n'
+                            '2) Dimension/sampling rate mismatch.')
         if self.failedTsIds:
             self.failedTsIdsStr.set(str(self.failedTsIds))
             self._store(self.failedTsIdsStr)
