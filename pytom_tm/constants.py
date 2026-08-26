@@ -43,3 +43,8 @@ BASE_SEED=42
 
 #---------- EXTRACT PARTICLES------------
 IN_TM_PROTOCOL ='inTmProtocol'
+
+#mask choice
+MASK_NO = 0
+MASK_PYTOM_TM = 1
+MASK_OTHER = 2
