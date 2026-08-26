@@ -17,7 +17,7 @@ IN_CTF_SET = 'inCtfSet'
 IN_TS_SET = 'inTsSet'
 REF_VOL = 'reference'
 IN_MASK = 'mask'
-TOMO_MASKS = 'volMask'
+TOMO_MASKS = 'tomoMasks'
 
 #Extensions
 MRC_EXT = '.mrc'
@@ -34,9 +34,10 @@ SCORE_SUFFIX = '_tomo_scores'
 JSON_SUFFIX = '_tomo_job'
 
 #defocus handedness
-DEFOCUS_HAND_NEG = -1
-DEFOCUS_HAND_POS = 1
-DEFOCUS_HAND_OFF = 0
+DEFOCUS_HAND_NEG = 0
+DEFOCUS_HAND_OFF = 1
+DEFOCUS_HAND_POS = 2
+
 
 #base seed
 BASE_SEED=42

@@ -1,13 +1,18 @@
 import logging
+import traceback
 from enum import Enum
+from typing import List, Optional
 
 from pwem.protocols import EMProtocol
-from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM
+from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX
+from pytom_tm.objects import SetOfPytomScoreTomograms
+from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
 from pyworkflow.object import String
 from pyworkflow.protocol import PointerParam, IntParam, GT, FloatParam, GE, LE, StringParam, EnumParam
-from pyworkflow.utils import Message
+from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
 from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks
+from tomo.utils import getTsIdsDicts, getTsIdsIntersection, check_sr_and_size, convertOrLink
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +21,7 @@ class Pytom_extract_outputs(Enum):
     coordinates = SetOfCoordinates3D
 
 
-class ProtPytomExtractCoordinates(EMProtocol):
+class ProtPytomExtractCoordinates(ProtPytomBase):
     """Extract coordinates from Pytom score tomograms."""
 
     _label = 'extract coordinates from Pytom'
@@ -26,7 +31,8 @@ class ProtPytomExtractCoordinates(EMProtocol):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.tomoscoreDict = {}
+        self.scoreTomoDict = {}
+        self.tomoMasksDict = {}
         self.failedTsIds = []
         self.failedTsIdsStr = String()
 
@@ -38,8 +44,8 @@ class ProtPytomExtractCoordinates(EMProtocol):
                       important=True,
                       label='Protocol Pytom TM')
         form.addParam('mask_choice', EnumParam,
-                      choices=['no TomoMasks', 'Same as input protocol', 'Other TomoMasks'],
-                      display=EnumParam.DISPLAY_COMBO,
+                      choices=['No TomoMasks', 'Same as input protocol', 'Other TomoMasks'],
+                      display=EnumParam.DISPLAY_HLIST,
                       label='TomoMasks (segmentations)',
                       default=MASK_PYTOM_TM,
                       help="Here you can provide a mask for the extraction with dimensions "
@@ -51,8 +57,9 @@ class ProtPytomExtractCoordinates(EMProtocol):
                       )
         form.addParam(TOMO_MASKS, PointerParam,
                       pointerClass=SetOfTomoMasks,
-                      label='Tomogram masks (segmentations, opt.)',
+                      label='Tomogram masks (segmentations)',
                       allowsNull=True,
+                      condition=f'mask_choice == {MASK_OTHER}',
                       help="All values in the mask that are smaller or "
                            "equal to 0 will be removed, all values larger than 0 are considered regions "
                            "of interest. It can be used to extract annotations only within a specific "
@@ -113,22 +120,20 @@ class ProtPytomExtractCoordinates(EMProtocol):
     def _insertAllSteps(self):
         self._initialize()
         closeSetStepDeps = []
+        pId = []
 
-        cRId = self._insertFunctionStep(self.convertReferenceStep,
-                                        prerequisites=[],
-                                        needsGPU=False)
-
-        for tsId in self.tomoDict.keys():
-            cInputId = self._insertFunctionStep(self.convertTomoMaskStep, tsId,
-                                                prerequisites=cRId,
-                                                needsGPU=False)
-            tmId = self._insertFunctionStep(self.extractCoordinatesStep, tsId,
-                                            prerequisites=cInputId,
-                                            needsGPU=True)
-            cOutId = self._insertFunctionStep(self.createOutputStep, tsId,
-                                              prerequisites=tmId,
-                                              needsGPU=False)
-            closeSetStepDeps.append(cOutId)
+        for tsId in self.scoreTomoDict.keys():
+            if self.tomoMasksDict:
+                pId = self._insertFunctionStep(self.convertTomoMaskStep, tsId,
+                                               prerequisites=pId,
+                                               needsGPU=False)
+            pId = self._insertFunctionStep(self.extractCoordinatesStep, tsId,
+                                           prerequisites=pId,
+                                           needsGPU=True)
+            pId = self._insertFunctionStep(self.createOutputStep, tsId,
+                                           prerequisites=pId,
+                                           needsGPU=False)
+            closeSetStepDeps.append(pId)
         self._insertFunctionStep(self.closeOutputSetStep,
                                  prerequisites=closeSetStepDeps,
                                  needsGPU=False)
@@ -136,3 +141,85 @@ class ProtPytomExtractCoordinates(EMProtocol):
         # -------------------------- STEPS functions ------------------------------
 
     def _initialize(self):
+        mask_choice = self.mask_choice.get()
+        scoreTomos = self.getScoreTomos()
+        tomoMasks = self.getTomoMasks()
+        self.scoreTomoDict = getTsIdsDicts(scoreTomos)
+
+        if tomoMasks:
+            presentTsIds = None
+            if mask_choice == MASK_OTHER:
+                presentTsIds = getTsIdsIntersection(scoreTomos, tomoMasks)
+            self.scoreTomoDict, self.tomoMasksDict = getTsIdsDicts(scoreTomos, tomoMasks,
+                                                                   present_ts_ids=presentTsIds)
+
+    def convertTomoMaskStep(self, tsId: str):
+        logger.info(cyanStr(f'tsId = {tsId}: converting the tomo mask...'))
+
+        try:
+            self.make_dirs(tsId)
+            tomomask = self.tomoMasksDict[tsId]
+            scoreTomo = self.scoreTomoDict[tsId]
+            mask_choice = self.mask_choice.get()
+
+            if mask_choice == MASK_OTHER:
+                msg = check_sr_and_size(tomomask, scoreTomo)
+                if msg:
+                    self.failedTsIds.append(tsId)
+                    logger.info(yellowStr(f'tsId = {tsId} -> {msg}'))
+                    return
+
+            inTomoMaskFile = tomomask.getFileName()
+            outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
+            convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=scoreTomo.getSamplingRate())
+
+        except Exception as e:
+            self.failedTsIds.append(tsId)
+            logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
+
+
+    def extractCoordinatesStep(self, tsId: str):
+        pass
+
+    def createOutputStep(self, tsId: str):
+        pass
+
+    def closeOutputSetStep(self):
+        pass
+
+        # --------------------------- INFO functions ------------------------------
+
+    def _validate(self) -> List[str]:
+        valMsg = []
+        inTomoMasks = self._getFormAttrib(TOMO_MASKS)
+        mask_choice = self.mask_choice.get()
+
+        if mask_choice == MASK_PYTOM_TM and not self.getTMTomoMasks():
+            valMsg.append('No TomoMasks were used in the introduced protocol. If you want to use TomoMasks choose '
+                          'the "Other TomoMasks" option in parameter "TomoMasks (segmentations)".')
+        if mask_choice == MASK_OTHER and not inTomoMasks:
+            valMsg.append('No TomoMasks are available but "Other TomoMasks" was selected in parameter '
+                          '"TomoMasks (segmentations)".')
+        if not self.getScoreTomos():
+            valMsg.append('No Score Tomograms were generated by the introduced protocol.')
+
+        return valMsg
+
+    # --------------------------- UTILS functions ------------------------------
+    def getScoreTomos(self) -> Optional[SetOfPytomScoreTomograms]:
+        protTM = self._getFormAttrib(IN_TM_PROTOCOL)
+        return getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
+
+    def getTMTomoMasks(self) -> Optional[SetOfTomoMasks]:
+        protTM = self._getFormAttrib(IN_TM_PROTOCOL)
+        return getattr(protTM, TOMO_MASKS, None)
+
+    def getTomoMasks(self) -> Optional[SetOfTomoMasks]:
+        mask_choice = self.mask_choice.get()
+
+        if mask_choice == MASK_PYTOM_TM:
+            return self.getTMTomoMasks()
+        if mask_choice == MASK_OTHER:
+            return self._getFormAttrib(TOMO_MASKS)
+        return None

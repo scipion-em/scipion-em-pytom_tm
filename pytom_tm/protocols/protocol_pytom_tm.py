@@ -45,6 +45,7 @@ from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET
     TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, \
     BASE_SEED, SCORE_SUFFIX, JSON_EXT, JSON_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms, PytomScoreTomogram
+from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
 from pyworkflow.object import Pointer, String, Set
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
@@ -61,7 +62,7 @@ class Pytom_tm_output(Enum):
     scoreTomograms = SetOfPytomScoreTomograms  # output name is scoreTomograms within a specific class SetOfPytomTOmograms
 
 
-class ProtPytomTemplateMatching(EMProtocol):
+class ProtPytomTemplateMatching(ProtPytomBase):
     """GPU-accelerated template matching for cryo-electron tomography,
     originally developed in PyTom, as a standalone Python package that is run from the command line.
     """
@@ -156,7 +157,7 @@ class ProtPytomTemplateMatching(EMProtocol):
                            "Format is x y z, e.g. --volume-split 1 2 1")
 
         form.addParam('defocus_handedness', EnumParam,
-                      choices=[DEFOCUS_HAND_NEG, DEFOCUS_HAND_OFF, DEFOCUS_HAND_POS],
+                      choices=['-1', 'off', '1'],
                       display=EnumParam.DISPLAY_HLIST,
                       label='Defocus Handedness',
                       expertLevel=LEVEL_ADVANCED,
@@ -371,12 +372,12 @@ class ProtPytomTemplateMatching(EMProtocol):
             raise Exception(f'Reference conversion failed with the exception -> {e}')
 
     def convertInputStep(self, tsId: str):
+        logger.info(cyanStr(f'tsId = {tsId}: converting the inputs...'))
+
 
         try:
 
-            tsDir = self._getCurrentTomoDir(tsId)
-            tsTmpDir = self._getCurrentTomoTmpDir(tsId)
-            makePath(tsDir, tsTmpDir)
+            self.make_dirs(tsId)
             tomo = self.tomoDict[tsId]
 
             if self.tomoMaskDict:
@@ -430,7 +431,7 @@ class ProtPytomTemplateMatching(EMProtocol):
         if tsId in self.failedTsIds:
             return
         try:
-            logger.info(cyanStr(f'===> tsId = {tsId}: performing the template matching...'))
+            logger.info(cyanStr(f'tsId = {tsId}: performing the template matching...'))
             Plugin.runPytom(self, self._program, self._generateArguments(tsId))
 
         except Exception as e:
@@ -545,33 +546,16 @@ class ProtPytomTemplateMatching(EMProtocol):
         except ValueError:
             return False
 
-    def _getFormAttrib(self, attribName: str, returnPointer: bool = False) -> Optional[Union[SetOfTiltSeries,
-    SetOfTomograms, SetOfCTFTomoSeries, Volume, Pointer]]:
-        inTsPointer = getattr(self, attribName, None)
-        if not inTsPointer:
-            return None
-        else:
-            return inTsPointer if returnPointer else inTsPointer.get()
-
     # if IN_TS_SET is not an input, get it yourself via:
     def _getTsFromRelations(self) -> Optional[SetOfTiltSeries]:
         inCTFs = self._getFormAttrib(IN_CTF_SET)
         return getObjFromRelation(inCTFs, self, SetOfTiltSeries)
-
-    def _getCurrentTomoDir(self, tsId: str) -> str:
-        return self._getExtraPath(tsId)
 
     def getReferenceFileName(self) -> str:
         return self._getTmpPath(f'Reference{MRC_EXT}')
 
     def getMaskFileName(self) -> str:
         return self._getTmpPath(f'Mask{MRC_EXT}')
-
-    def _getCurrentTomoTmpDir(self, tsId: str) -> str:
-        return self._getTmpPath(tsId)
-
-    def _getConvertedOrLinkedName(self, tsId: str, suffix: str = '') -> str:
-        return join(self._getCurrentTomoTmpDir(tsId), f'{tsId}{suffix}{MRC_EXT}')
 
     def _getInputFileName(self, tsId: str, ext: str, suffix: str = '') -> str:
         return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{ext}')
