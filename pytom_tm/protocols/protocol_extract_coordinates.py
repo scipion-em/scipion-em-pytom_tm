@@ -220,11 +220,13 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
     # --------------------------- UTILS functions ------------------------------
     def getScoreTomos(self) -> Optional[SetOfPytomScoreTomograms]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
-        return getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
+        scoreTomosPinter = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
+        return scoreTomosPinter.get()
 
     def getTMTomoMasks(self) -> Optional[SetOfTomoMasks]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
-        return getattr(protTM, TOMO_MASKS, None)
+        tomoMasksPointer = getattr(protTM, TOMO_MASKS, None)
+        return tomoMasksPointer.get()
 
     def getTomoMasks(self) -> Optional[SetOfTomoMasks]:
         mask_choice = self.mask_choice.get()
