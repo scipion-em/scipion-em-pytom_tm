@@ -28,7 +28,7 @@ class ProtPytomBase(EMProtocol):
         return self._getTmpPath(tsId)
 
     def _getConvertedOrLinkedName(self, tsId: str, suffix: str = '') -> str:
-        return join(self._getCurrentTomoTmpDir(tsId), f'{tsId}{suffix}{MRC_EXT}')
+        return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{MRC_EXT}')
 
     def _getCurrentTomoDir(self, tsId: str) -> str:
         return self._getExtraPath(tsId)

@@ -283,18 +283,6 @@ class ProtPytomTemplateMatching(ProtPytomBase):
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
-        # FRANCESCA
-        # import os
-        # fname = "/home/francesa/test_FC.txt"
-        # if os.path.exists(fname):
-        #     os.remove(fname)
-        # with open(fname, "a+") as fjj:
-        #     fjj.write(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
-        #     print(f'FRANCESCA--------->onDebugMode PID {os.getpid()}')
-        # import time
-        # time.sleep(10)
-        # # FRANCESCA_END
-
         self._initialize()
         closeSetStepDeps = []
 
@@ -399,7 +387,8 @@ class ProtPytomTemplateMatching(ProtPytomBase):
                 convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=tomo.getSamplingRate())
 
             inTomoFile = tomo.getFileName()
-            outTomoFile = self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)
+            outTomoFile = self._getConvertedOrLinkedName(tsId, suffix=TOMO_SUFFIX)  # Tomos are
+            # required to be in extra in the extraction protocol
             convertOrLink(inTomoFile, outTomoFile, samplingRate=tomo.getSamplingRate())
 
             ts = self.tsDict[tsId]
@@ -552,10 +541,10 @@ class ProtPytomTemplateMatching(ProtPytomBase):
         return getObjFromRelation(inCTFs, self, SetOfTiltSeries)
 
     def getReferenceFileName(self) -> str:
-        return self._getTmpPath(f'Reference{MRC_EXT}')
+        return self._getExtraPath(f'Reference{MRC_EXT}')
 
     def getMaskFileName(self) -> str:
-        return self._getTmpPath(f'Mask{MRC_EXT}')
+        return self._getExtraPath(f'Mask{MRC_EXT}')
 
     def _getInputFileName(self, tsId: str, ext: str, suffix: str = '') -> str:
         return join(self._getCurrentTomoDir(tsId), f'{tsId}{suffix}{ext}')

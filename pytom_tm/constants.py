@@ -32,6 +32,7 @@ MASK_SUFFIX = '_tomoMask'
 DOSE_SUFFIX = '_dose'
 SCORE_SUFFIX = '_tomo_scores'
 JSON_SUFFIX = '_tomo_job'
+ANGLES_SUFFIX = '_tomo_angles'
 
 #defocus handedness
 DEFOCUS_HAND_NEG = 0
