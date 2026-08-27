@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List, Optional
 
 from pwem.protocols import EMProtocol
+from pytom_tm import Plugin
 from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pytom_tm.protocols.protocol_base import ProtPytomBase
@@ -180,7 +181,17 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
 
 
     def extractCoordinatesStep(self, tsId: str):
-        pass
+        if tsId in self.failedTsIds:
+            return
+        try:
+            logger.info(cyanStr(f'tsId = {tsId}: performing extract coordinates...'))
+            Plugin.runPytom(self, self._program, self._generateArguments(tsId))
+
+        except Exception as e:
+            self.failedTsIds.append(tsId)
+            logger.error(redStr(f'tsId = {tsId} -> pytom extract coordinates failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
+
 
     def createOutputStep(self, tsId: str):
         pass
@@ -223,3 +234,30 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         if mask_choice == MASK_OTHER:
             return self._getFormAttrib(TOMO_MASKS)
         return None
+
+    def _generateArguments(self, tsId: str)-> str:
+        scoreTomo = self.scoreTomoDict[tsId]
+        jsonScoreTomo = scoreTomo.getJsonFile()
+        outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
+
+        cmd = [
+            f'--job-file {jsonScoreTomo}',
+            f'--number-of-particles {self.number_of_particles.get()}',
+            f'--number-of-false-positives {self.number_false_positives.get()}',
+            f'--particle-diameter {self.particle_diameter.get()}',
+            '--relion5-compat',
+            '--log info',
+            # f'--tophat-bins',
+            # f'--plot-bins'
+        ]
+
+
+        if self.tomoMasksDict:
+            cmd.append(f'--tomogram-mask {outTomoMaskFile}')
+
+        if self.tophat_filter_con.get() > 0:
+            cmd.append('--tophat-filter')
+            cmd.append(f'--tophat-connectivity {self.tophat_filter_con.get()}')
+
+        return ' '.join(cmd)
+
