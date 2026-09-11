@@ -3,6 +3,10 @@ import traceback
 from enum import Enum
 from typing import List, Optional
 
+import numpy as np
+from emtable import Table
+
+from pwem.convert import transformations
 from pwem.protocols import EMProtocol
 from pytom_tm import Plugin
 from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX
@@ -12,7 +16,8 @@ from pyworkflow import BETA
 from pyworkflow.object import String
 from pyworkflow.protocol import PointerParam, IntParam, GT, FloatParam, GE, LE, StringParam, EnumParam
 from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
-from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks
+from tomo.constants import BOTTOM_LEFT_CORNER
+from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks, SetOfTomograms, Coordinate3D
 from tomo.utils import getTsIdsDicts, getTsIdsIntersection, check_sr_and_size, convertOrLink
 
 logger = logging.getLogger(__name__)
@@ -179,7 +184,6 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             logger.error(redStr(f'tsId = {tsId} -> input conversion failed with the exception -> {e}'))
             logger.error(traceback.format_exc())
 
-
     def extractCoordinatesStep(self, tsId: str):
         if tsId in self.failedTsIds:
             return
@@ -191,7 +195,6 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             self.failedTsIds.append(tsId)
             logger.error(redStr(f'tsId = {tsId} -> pytom extract coordinates failed with the exception -> {e}'))
             logger.error(traceback.format_exc())
-
 
     def createOutputStep(self, tsId: str):
         pass
@@ -220,12 +223,12 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
     # --------------------------- UTILS functions ------------------------------
     def getScoreTomos(self) -> Optional[SetOfPytomScoreTomograms]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
-        scoreTomosPinter = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
+        scoreTomosPinter = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, String())
         return scoreTomosPinter.get()
 
     def getTMTomoMasks(self) -> Optional[SetOfTomoMasks]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
-        tomoMasksPointer = getattr(protTM, TOMO_MASKS, None)
+        tomoMasksPointer = getattr(protTM, TOMO_MASKS, String())
         return tomoMasksPointer.get()
 
     def getTomoMasks(self) -> Optional[SetOfTomoMasks]:
@@ -237,7 +240,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             return self._getFormAttrib(TOMO_MASKS)
         return None
 
-    def _generateArguments(self, tsId: str)-> str:
+    def _generateArguments(self, tsId: str) -> str:
         scoreTomo = self.scoreTomoDict[tsId]
         jsonScoreTomo = scoreTomo.getJsonFile()
         outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
@@ -253,7 +256,6 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             # f'--plot-bins'
         ]
 
-
         if self.tomoMasksDict:
             cmd.append(f'--tomogram-mask {outTomoMaskFile}')
 
@@ -262,4 +264,65 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             cmd.append(f'--tophat-connectivity {self.tophat_filter_con.get()}')
 
         return ' '.join(cmd)
+
+    def starFile2Coords3D(self, tsId: str,
+                          coordsSet: SetOfCoordinates3D,
+                          scaleFactor: float = 1.):
+        """ Converts the contents of a preloaded star file into Scipion SetOfCoordinates3D.
+        :param coordsSet: SetOfCoordinates3D that will be filled with the contest from the loaded star file
+        :param tomogramsSet: introduced SetOfTomograms.
+        :param scaleFactor: used to scale the coordinates to the size of the tomograms."""
+        starFile = self._getExtraPath(f'{tsId},{tsId}_tomo_particles.star')
+        dataTable = Table()
+        dataTable.read(starFile, tableName='particles')
+
+        for row in dataTable:
+            # Consider that there can be coordinates in the star file that does not belong to any of the tomograms
+            # introduced
+            coord, tomoId = self.gen3dCoordFromStarRow(row,
+                                                       sRate,
+                                                       precedentIdDict,
+                                                       factor=scaleFactor)
+
+            coordsSet.append(coord)
+
+
+    def gen3dCoordFromStarRow(self, row, sRate, precedentIdDict, factor=1):
+        coordinate3d = None
+        tomoId = row.get(TOMO_NAME)
+        vol = precedentIdDict.get(tomoId, None)
+        if vol:
+            coordinate3d = Coordinate3D()
+            x = row.get(RLN_CENTEREDCOORDINATEXANGST, 0)/sRate
+            y = row.get(RLN_CENTEREDCOORDINATEYANGST, 0)/sRate
+            z = row.get(RLN_CENTEREDCOORDINATEZANGST, 0)/sRate
+            coordinate3d.setVolume(vol)
+
+            coordinate3d.setX(float(x) * factor, BOTTOM_LEFT_CORNER)
+            coordinate3d.setY(float(y) * factor, BOTTOM_LEFT_CORNER)
+            coordinate3d.setZ(float(z) * factor, BOTTOM_LEFT_CORNER)
+            trMatrix = self.eulerAngles2matrix(rot, tilt, psi)
+            coordinate3d.setMatrix(trMatrix)
+        return coordinate3d, tomoId
+
+    @staticmethod
+    def eulerAngles2matrix(tdrot, tilt, narot):
+        # Relevant info:
+        #   * Pytom's transformation system is ZXZ
+        tdrot = np.deg2rad(float(tdrot))
+        narot = np.deg2rad(float(narot))
+        tilt = np.deg2rad(float(tilt))
+        R = transformations.euler_matrix(tdrot, tilt, narot, axes='szxz')
+
+        return R
+
+
+TOMO_NAME = 'rlnTomoName'
+RLN_CENTEREDCOORDINATEXANGST = 'rlnCenteredCoordinateXAngst'
+RLN_CENTEREDCOORDINATEYANGST = 'rlnCenteredCoordinateYAngst'
+RLN_CENTEREDCOORDINATEZANGST = 'rlnCenteredCoordinateZAngst'
+ROT = 'rlnAngleRot'
+TILT = 'rlnAngleTilt'
+PSI = 'rlnAnglePsi'
+
 
