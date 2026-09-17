@@ -9,15 +9,15 @@ from emtable import Table
 from pwem.convert import transformations
 from pwem.protocols import EMProtocol
 from pytom_tm import Plugin
-from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX
+from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX, IN_TOMOS
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
-from pyworkflow.object import String
+from pyworkflow.object import String, Set
 from pyworkflow.protocol import PointerParam, IntParam, GT, FloatParam, GE, LE, StringParam, EnumParam
 from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
 from tomo.constants import BOTTOM_LEFT_CORNER
-from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks, SetOfTomograms, Coordinate3D
+from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks, SetOfTomograms, Coordinate3D, Tomogram
 from tomo.utils import getTsIdsDicts, getTsIdsIntersection, check_sr_and_size, convertOrLink
 
 logger = logging.getLogger(__name__)
@@ -39,8 +39,10 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         super().__init__(**kwargs)
         self.scoreTomoDict = {}
         self.tomoMasksDict = {}
+        self.inTomoDict = {}
         self.failedTsIds = []
         self.failedTsIdsStr = String()
+        self.sRate = -1
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -150,14 +152,21 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         mask_choice = self.mask_choice.get()
         scoreTomos = self.getScoreTomos()
         tomoMasks = self.getTomoMasks()
-        self.scoreTomoDict = getTsIdsDicts(scoreTomos)
+        self.sRate = scoreTomos.getSamplingRate()
+
+        input_protocol = self._getFormAttrib(IN_TM_PROTOCOL)
+        inTomoSet = getattr(input_protocol, IN_TOMOS).get()
+        presentTsIds = getTsIdsIntersection(scoreTomos, inTomoSet)
+
+        self.scoreTomoDict, self.inTomoDict = getTsIdsDicts(scoreTomos, inTomoSet, present_ts_ids=presentTsIds)
 
         if tomoMasks:
             presentTsIds = None
             if mask_choice == MASK_OTHER:
-                presentTsIds = getTsIdsIntersection(scoreTomos, tomoMasks)
-            self.scoreTomoDict, self.tomoMasksDict = getTsIdsDicts(scoreTomos, tomoMasks,
-                                                                   present_ts_ids=presentTsIds)
+                presentTsIds = getTsIdsIntersection(scoreTomos, tomoMasks, inTomoSet)
+            self.scoreTomoDict, self.tomoMasksDict, self.inTomoDict = getTsIdsDicts(scoreTomos, tomoMasks,
+                                                                                    inTomoSet,
+                                                                                    present_ts_ids=presentTsIds)
 
     def convertTomoMaskStep(self, tsId: str):
         logger.info(cyanStr(f'tsId = {tsId}: converting the tomo mask...'))
@@ -197,10 +206,24 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             logger.error(traceback.format_exc())
 
     def createOutputStep(self, tsId: str):
-        pass
+        if tsId in self.failedTsIds:
+            return
+        try:
+            logger.info(cyanStr(f'tsId = {tsId}: generating the output...'))
+            outputCoords = self.createOutputSet()
+            self.starFile2Coords3D(tsId, outputCoords)
+
+        except Exception as e:
+            self.failedTsIds.append(tsId)
+            logger.error(redStr(f'tsId = {tsId} -> generating the output failed with the exception -> {e}'))
+            logger.error(traceback.format_exc())
 
     def closeOutputSetStep(self):
-        pass
+        self._closeOutputSet()
+        outputSet = getattr(self, self._possibleOutputs.coordinates.name, None)
+
+        if outputSet is None or (outputSet is not None and len(outputSet) == 0):
+            raise Exception('No coordinates were extracted.')
 
         # --------------------------- INFO functions ------------------------------
 
@@ -266,44 +289,42 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         return ' '.join(cmd)
 
     def starFile2Coords3D(self, tsId: str,
-                          coordsSet: SetOfCoordinates3D,
-                          scaleFactor: float = 1.):
-        """ Converts the contents of a preloaded star file into Scipion SetOfCoordinates3D.
-        :param coordsSet: SetOfCoordinates3D that will be filled with the contest from the loaded star file
-        :param tomogramsSet: introduced SetOfTomograms.
-        :param scaleFactor: used to scale the coordinates to the size of the tomograms."""
-        starFile = self._getExtraPath(f'{tsId},{tsId}_tomo_particles.star')
+                          coordsSet: SetOfCoordinates3D) -> None:
+
+        starFile = self._getExtraPath(tsId, f'{tsId}_tomo_particles.star')
         dataTable = Table()
         dataTable.read(starFile, tableName='particles')
+        inTomo = self.inTomoDict[tsId]
 
         for row in dataTable:
             # Consider that there can be coordinates in the star file that does not belong to any of the tomograms
             # introduced
-            coord, tomoId = self.gen3dCoordFromStarRow(row,
-                                                       sRate,
-                                                       precedentIdDict,
-                                                       factor=scaleFactor)
-
+            coord = self.gen3dCoordFromStarRow(row, inTomo)
             coordsSet.append(coord)
 
+    def gen3dCoordFromStarRow(self, row, inTomo: Tomogram) -> Coordinate3D:
 
-    def gen3dCoordFromStarRow(self, row, sRate, precedentIdDict, factor=1):
-        coordinate3d = None
-        tomoId = row.get(TOMO_NAME)
-        vol = precedentIdDict.get(tomoId, None)
-        if vol:
-            coordinate3d = Coordinate3D()
-            x = row.get(RLN_CENTEREDCOORDINATEXANGST, 0)/sRate
-            y = row.get(RLN_CENTEREDCOORDINATEYANGST, 0)/sRate
-            z = row.get(RLN_CENTEREDCOORDINATEZANGST, 0)/sRate
-            coordinate3d.setVolume(vol)
+        coordinate3d = Coordinate3D()
+        x = row.get(RLN_CENTEREDCOORDINATEXANGST, 0) / self.sRate
+        y = row.get(RLN_CENTEREDCOORDINATEYANGST, 0) / self.sRate
+        z = row.get(RLN_CENTEREDCOORDINATEZANGST, 0) / self.sRate
+        coordinate3d.setVolume(inTomo)
 
-            coordinate3d.setX(float(x) * factor, BOTTOM_LEFT_CORNER)
-            coordinate3d.setY(float(y) * factor, BOTTOM_LEFT_CORNER)
-            coordinate3d.setZ(float(z) * factor, BOTTOM_LEFT_CORNER)
-            trMatrix = self.eulerAngles2matrix(rot, tilt, psi)
-            coordinate3d.setMatrix(trMatrix)
-        return coordinate3d, tomoId
+        coordinate3d.setX(float(x), BOTTOM_LEFT_CORNER)
+        coordinate3d.setY(float(y), BOTTOM_LEFT_CORNER)
+        coordinate3d.setZ(float(z), BOTTOM_LEFT_CORNER)
+
+        rot = row.get(ROT, 0)
+        tilt = row.get(TILT, 0)
+        psi = row.get(PSI, 0)
+
+        trMatrix = self.eulerAngles2matrix(rot, tilt, psi)
+        coordinate3d.setMatrix(trMatrix)
+        score = row.get(SCORE, 0)
+        coordinate3d.setScore(score)
+        coordinate3d.setBoxSize(self.particle_diameter.get())
+
+        return coordinate3d
 
     @staticmethod
     def eulerAngles2matrix(tdrot, tilt, narot):
@@ -317,6 +338,27 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         return R
 
 
+    def createOutputSet(self)->SetOfCoordinates3D:
+        outCoords = getattr(self, self._possibleOutputs.coordinates.name, None)
+        if outCoords:
+            outCoords.enableAppend()
+        else:
+            inScoreTomosPointer = self._getFormAttrib(IN_TM_PROTOCOL, returnPointer=True)
+            inScoreTomos = inScoreTomosPointer.get()
+            outCoords = SetOfCoordinates3D.create(self._getPath(), template="coordinates%s")
+            input_protocol = self._getFormAttrib(IN_TM_PROTOCOL)
+            inTomoSet = getattr(input_protocol, IN_TOMOS).get()
+            outCoords.setPrecedents(inTomoSet)
+            outCoords.setSamplingRate(inScoreTomos.getSamplingRate())
+            outCoords.setBoxSize(self.particle_diameter.get())
+            outCoords.setStreamState(Set.STREAM_OPEN)
+
+            self._defineOutputs(**{self._possibleOutputs.coordinates.name: outCoords})
+            self._defineSourceRelation(inScoreTomosPointer, outCoords)
+
+        return outCoords
+
+
 TOMO_NAME = 'rlnTomoName'
 RLN_CENTEREDCOORDINATEXANGST = 'rlnCenteredCoordinateXAngst'
 RLN_CENTEREDCOORDINATEYANGST = 'rlnCenteredCoordinateYAngst'
@@ -324,5 +366,4 @@ RLN_CENTEREDCOORDINATEZANGST = 'rlnCenteredCoordinateZAngst'
 ROT = 'rlnAngleRot'
 TILT = 'rlnAngleTilt'
 PSI = 'rlnAnglePsi'
-
-
+SCORE = 'rlnLCCmax'
