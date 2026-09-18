@@ -63,11 +63,11 @@ class Plugin(pwem.Plugin):
         return neededProgs
 
     @classmethod
-    def runPytom(cls, protocol, program, args, cwd=None, numberOfMpi=1):
+    def runPytom(cls, protocol, program, args, cwd=None, numberOfMpi=1, useGpu=True):
         """ Run pytom command from a given protocol. """
         cmd = cls.getCondaActivationCmd() + " "
         cmd += cls.getPyTomEnvActivation()
-        cmd += f" && CUDA_VISIBLE_DEVICES=%(GPU)s {program} "
+        cmd += f" && CUDA_VISIBLE_DEVICES=%(GPU)s {program} " if useGpu else f" && {program} "
 
         protocol.runJob(cmd, args, env=cls.getEnviron(), cwd=cwd, numberOfMpi=numberOfMpi)
 
