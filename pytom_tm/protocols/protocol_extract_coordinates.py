@@ -1,6 +1,9 @@
+import json
 import logging
+import shutil
 import traceback
 from enum import Enum
+from os.path import join, basename
 from typing import List, Optional
 
 import numpy as np
@@ -8,7 +11,8 @@ from emtable import Table
 
 from pwem.convert import transformations
 from pytom_tm import Plugin
-from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX, IN_TOMOS
+from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX, IN_TOMOS, \
+    SCORE_SUFFIX, ANGLES_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
@@ -172,10 +176,29 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         logger.info(cyanStr(f'tsId = {tsId}: converting the tomo mask...'))
 
         try:
-            self.make_dirs(tsId)
             tomomask = self.tomoMasksDict[tsId]
+            self.make_dirs(tsId)
             scoreTomo = self.scoreTomoDict[tsId]
             mask_choice = self.mask_choice.get()
+
+            # modify output_dir field in json file to save .star file
+            jsonIn = scoreTomo.getJsonFile()
+            jsonOut = self.getJsonOut(jsonIn, tsId)
+            outputDir = self._getCurrentTomoDir(tsId)
+            self.copy_and_update_json(jsonIn, jsonOut, outputDir)
+
+            # linking objects to the new output_dir: the extract_coordinates script looks for these objects
+            # by reconstructing their own path starting from the output_dir path within the json file
+
+            # linking score tomos
+            inScoreTomoFile = scoreTomo.getFileName()
+            outScoreTomo = self._getConvertedOrLinkedName(tsId, suffix=SCORE_SUFFIX)
+            convertOrLink(inScoreTomoFile, outScoreTomo, samplingRate=scoreTomo.getSamplingRate())
+
+            # linking angles
+            inAngles = scoreTomo.getFileName().replace(SCORE_SUFFIX, ANGLES_SUFFIX)
+            outAngles = self._getConvertedOrLinkedName(tsId, suffix=ANGLES_SUFFIX)
+            convertOrLink(inAngles, outAngles, samplingRate=scoreTomo.getSamplingRate())
 
             if mask_choice == MASK_OTHER:
                 msg = check_sr_and_size(tomomask, scoreTomo)
@@ -244,6 +267,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         return valMsg
 
     # --------------------------- UTILS functions ------------------------------
+
     def getScoreTomos(self) -> Optional[SetOfPytomScoreTomograms]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
         scoreTomos = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
@@ -356,6 +380,32 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
 
         return outCoords
 
+    def getJsonOut(self, jsonIn: str, tsId: str) -> str:
+        fileName = basename(jsonIn)
+        return join(self._getCurrentTomoDir(tsId), fileName)
+
+    @staticmethod
+    def copy_and_update_json(source_json: str, dest_json: str, new_output_dir: str) -> None:
+        """
+        Copies a JSON file and updates the 'output_dir' field.
+
+        :param source_json: path to the original JSON file
+        :param dest_json: path where the modified copy will be saved
+        :param new_output_dir: new value for the 'output_dir' field
+        """
+        # 1. Copy the file as-is (optional, in case you want to keep the original untouched)
+        shutil.copy(source_json, dest_json)
+
+        # 2. Load the JSON content
+        with open(dest_json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # 3. Update the output_dir field
+        data["output_dir"] = new_output_dir
+
+        # 4. Write the changes back to the file
+        with open(dest_json, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
 
 TOMO_NAME = 'rlnTomoName'
 RLN_CENTEREDCOORDINATEXANGST = 'rlnCenteredCoordinateXAngst'
