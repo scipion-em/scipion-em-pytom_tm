@@ -75,6 +75,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         form.addParam('number_of_particles', IntParam,
                       label='Number of particles',
                       allowsNull=False,
+                      default=1000,
                       validators=[GT(0)],
                       help="Maximum number of particles to extract from tomogram."
                       )
@@ -245,8 +246,8 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
     # --------------------------- UTILS functions ------------------------------
     def getScoreTomos(self) -> Optional[SetOfPytomScoreTomograms]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
-        scoreTomosPinter = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, String())
-        return scoreTomosPinter.get()
+        scoreTomos = getattr(protTM, protTM._possibleOutputs.scoreTomograms.name, None)
+        return scoreTomos
 
     def getTMTomoMasks(self) -> Optional[SetOfTomoMasks]:
         protTM = self._getFormAttrib(IN_TM_PROTOCOL)
@@ -336,8 +337,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
 
         return R
 
-
-    def createOutputSet(self)->SetOfCoordinates3D:
+    def createOutputSet(self) -> SetOfCoordinates3D:
         outCoords = getattr(self, self._possibleOutputs.coordinates.name, None)
         if outCoords:
             outCoords.enableAppend()
