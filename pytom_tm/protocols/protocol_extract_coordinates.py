@@ -135,10 +135,10 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         pId = []
 
         for tsId in self.scoreTomoDict.keys():
-            if self.tomoMasksDict:
-                pId = self._insertFunctionStep(self.convertTomoMaskStep, tsId,
-                                               prerequisites=pId,
-                                               needsGPU=False)
+
+            pId = self._insertFunctionStep(self.convertInputStep, tsId,
+                                           prerequisites=pId,
+                                           needsGPU=False)
             pId = self._insertFunctionStep(self.extractCoordinatesStep, tsId,
                                            prerequisites=pId,
                                            needsGPU=True)
@@ -172,11 +172,11 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
                                                                                     inTomoSet,
                                                                                     present_ts_ids=presentTsIds)
 
-    def convertTomoMaskStep(self, tsId: str):
+    def convertInputStep(self, tsId: str):
         logger.info(cyanStr(f'tsId = {tsId}: converting the tomo mask...'))
 
         try:
-            tomomask = self.tomoMasksDict[tsId]
+
             self.make_dirs(tsId)
             scoreTomo = self.scoreTomoDict[tsId]
             mask_choice = self.mask_choice.get()
@@ -200,16 +200,18 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             outAngles = self._getConvertedOrLinkedName(tsId, suffix=ANGLES_SUFFIX)
             convertOrLink(inAngles, outAngles, samplingRate=scoreTomo.getSamplingRate())
 
-            if mask_choice == MASK_OTHER:
-                msg = check_sr_and_size(tomomask, scoreTomo)
-                if msg:
-                    self.failedTsIds.append(tsId)
-                    logger.info(yellowStr(f'tsId = {tsId} -> {msg}'))
-                    return
+            if self.tomoMasksDict:
+                if mask_choice == MASK_OTHER:
+                    tomomask = self.tomoMasksDict[tsId]
+                    msg = check_sr_and_size(tomomask, scoreTomo)
+                    if msg:
+                        self.failedTsIds.append(tsId)
+                        logger.info(yellowStr(f'tsId = {tsId} -> {msg}'))
+                        return
 
-            inTomoMaskFile = tomomask.getFileName()
-            outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
-            convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=scoreTomo.getSamplingRate())
+                inTomoMaskFile = tomomask.getFileName()
+                outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
+                convertOrLink(inTomoMaskFile, outTomoMaskFile, samplingRate=scoreTomo.getSamplingRate())
 
         except Exception as e:
             self.failedTsIds.append(tsId)
