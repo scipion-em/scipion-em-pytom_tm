@@ -19,7 +19,7 @@ from pyworkflow import BETA
 from pyworkflow.object import String, Set
 from pyworkflow.protocol import PointerParam, IntParam, GT, FloatParam, GE, LE, StringParam, EnumParam
 from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
-from tomo.constants import BOTTOM_LEFT_CORNER
+from tomo.constants import BOTTOM_LEFT_CORNER, SCIPION
 from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks, Tomogram, Coordinate3D
 from tomo.utils import getTsIdsDicts, getTsIdsIntersection, check_sr_and_size, convertOrLink
 
@@ -337,9 +337,9 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         z = row.get(RLN_CENTEREDCOORDINATEZANGST, 0) / self.sRate
         coordinate3d.setVolume(inTomo)
 
-        coordinate3d.setX(float(x), BOTTOM_LEFT_CORNER)
-        coordinate3d.setY(float(y), BOTTOM_LEFT_CORNER)
-        coordinate3d.setZ(float(z), BOTTOM_LEFT_CORNER)
+        coordinate3d.setX(float(x), SCIPION)
+        coordinate3d.setY(float(y), SCIPION)
+        coordinate3d.setZ(float(z), SCIPION)
 
         rot = row.get(ROT, 0)
         tilt = row.get(TILT, 0)
