@@ -342,8 +342,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         if outCoords:
             outCoords.enableAppend()
         else:
-            inScoreTomosPointer = self._getFormAttrib(IN_TM_PROTOCOL, returnPointer=True)
-            inScoreTomos = inScoreTomosPointer.get()
+            inScoreTomos = self.getScoreTomos()
             outCoords = SetOfCoordinates3D.create(self._getPath(), template="coordinates%s")
             input_protocol = self._getFormAttrib(IN_TM_PROTOCOL)
             inTomoSet = getattr(input_protocol, IN_TOMOS).get()
@@ -353,7 +352,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             outCoords.setStreamState(Set.STREAM_OPEN)
 
             self._defineOutputs(**{self._possibleOutputs.coordinates.name: outCoords})
-            self._defineSourceRelation(inScoreTomosPointer, outCoords)
+            self._defineSourceRelation(inScoreTomos, outCoords)
 
         return outCoords
 
