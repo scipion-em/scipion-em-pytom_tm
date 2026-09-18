@@ -3,16 +3,20 @@ import traceback
 from enum import Enum
 from typing import List, Optional
 
-from pwem.protocols import EMProtocol
+import numpy as np
+from emtable import Table
+
+from pwem.convert import transformations
 from pytom_tm import Plugin
-from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX
+from pytom_tm.constants import IN_TM_PROTOCOL, TOMO_MASKS, MASK_PYTOM_TM, MASK_OTHER, MASK_SUFFIX, IN_TOMOS
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
-from pyworkflow.object import String
+from pyworkflow.object import String, Set
 from pyworkflow.protocol import PointerParam, IntParam, GT, FloatParam, GE, LE, StringParam, EnumParam
 from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
-from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks
+from tomo.constants import BOTTOM_LEFT_CORNER
+from tomo.objects import SetOfCoordinates3D, SetOfTomoMasks, Tomogram, Coordinate3D
 from tomo.utils import getTsIdsDicts, getTsIdsIntersection, check_sr_and_size, convertOrLink
 
 logger = logging.getLogger(__name__)
