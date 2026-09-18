@@ -291,11 +291,12 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
 
     def _generateArguments(self, tsId: str) -> str:
         scoreTomo = self.scoreTomoDict[tsId]
-        jsonScoreTomo = scoreTomo.getJsonFile()
+        jsonIn = scoreTomo.getJsonFile()
+        jsonOut = self.getJsonOut(jsonIn, tsId)
         outTomoMaskFile = self._getConvertedOrLinkedName(tsId, suffix=MASK_SUFFIX)
 
         cmd = [
-            f'--job-file {jsonScoreTomo}',
+            f'--job-file {jsonOut}',
             f'--number-of-particles {self.number_of_particles.get()}',
             f'--number-of-false-positives {self.number_false_positives.get()}',
             f'--particle-diameter {self.particle_diameter.get()}',
