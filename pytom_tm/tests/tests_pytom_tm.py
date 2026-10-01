@@ -27,7 +27,7 @@
 from os.path import exists
 from typing import Union, List, Tuple
 from cistem.protocols import CistemProtTsCtffind
-from gapstop.objects import SetOfPytomScoreTomograms
+from pytom_tm.objects import SetOfPytomScoreTomograms
 from imod.constants import OUTPUT_TILTSERIES_NAME
 from imod.protocols import ProtImodExcludeViews
 from pwem.objects import VolumeMask
