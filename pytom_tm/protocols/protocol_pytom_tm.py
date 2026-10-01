@@ -406,7 +406,7 @@ class ProtPytomTemplateMatching(ProtPytomBase):
             genDefocusFileFromScipion(ctf, ts, outDefocus)
 
             outTilt_Angles = self._getInputFileName(tsId, TILT_ANGLES_EXT)
-            ts.generateTltFile(outTilt_Angles, presentAcqOrders)
+            ts.generateTltFile(outTilt_Angles, presentAcqOrders=presentAcqOrders)
 
             outDosePath = self._getInputFileName(tsId, DOSE_EXT, suffix=DOSE_SUFFIX)
             self.generateDoseFile(ts, outDosePath, presentAcqOrders)

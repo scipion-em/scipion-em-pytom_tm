@@ -21,6 +21,7 @@ class PytomScoreTomogram(Tomogram):
         self._jsonFile.set(jsonFile)
 
 
+
 class SetOfPytomScoreTomograms(SetOfTomograms):
     ITEM_TYPE = PytomScoreTomogram
     EXPOSE_ITEMS = True
