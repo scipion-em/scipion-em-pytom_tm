@@ -27,6 +27,8 @@
 from os.path import exists
 from typing import Union, List, Tuple
 from cistem.protocols import CistemProtTsCtffind
+
+from pytom_tm.constants import MASK_NO
 from pytom_tm.objects import SetOfPytomScoreTomograms
 from imod.constants import OUTPUT_TILTSERIES_NAME
 from imod.protocols import ProtImodExcludeViews
@@ -252,6 +254,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         print(magentaStr("\n==> Pytom_TM == > extracting the coordinates"))
         protPytomExtract = self.newProtocol(ProtPytomExtractCoordinates,
                                             inTmProtocol=protTMprot,
+                                            mask_choice=MASK_NO,
                                             particle_diameter=self.particleDiameter)
 
         self.launchProtocol(protPytomExtract)
