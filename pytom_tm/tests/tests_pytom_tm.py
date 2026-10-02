@@ -255,7 +255,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         protPytomExtract = self.newProtocol(ProtPytomExtractCoordinates,
                                             inTmProtocol=protTMprot,
                                             mask_choice=MASK_NO,
-                                            particle_diameter=self.particleDiameter)
+                                            particle_diameter=self.particleDiameter*self.sRateBin8)
 
         self.launchProtocol(protPytomExtract)
         return getattr(protPytomExtract, protPytomExtract._possibleOutputs.coordinates.name, None)
