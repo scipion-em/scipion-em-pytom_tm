@@ -215,7 +215,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                     inTsSet: SetOfTiltSeries,
                     ctfSetMsg: str,
                     tsSetMsg: str) \
-            -> Union[SetOfPytomScoreTomograms, None]:
+            -> Tuple[ProtPytomTemplateMatching, Union[SetOfPytomScoreTomograms, None]]:
         print(magentaStr(f"\n==> Running the Pytom_TM:"
                          f"\n\t- CTFs: {ctfSetMsg}"
                          f"\n\t- Tilt-series = {tsSetMsg}"))
@@ -225,14 +225,13 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                        inTsSet=inTsSet,
                                        reference=self.refBin8,
                                        mask=self.maskBin8,
-                                       doInvertRefContrast=True,
-                                       nTiles=8,
-                                       coneSampling=15,
-                                       rotSymDeg=6)
+                                       invert_contrast=True,
+                                       volume_split='1 2 1')
         objLabel = f'ts {tsSetMsg}, ctf {ctfSetMsg}'
         protPytomTM.setObjLabel(objLabel)
         self.launchProtocol(protPytomTM)
-        return getattr(protPytomTM, protPytomTM._possibleOutputs.scoreTomograms.name, None)
+        scoreTomos = getattr(protPytomTM, protPytomTM._possibleOutputs.scoreTomograms.name, None)
+        return protPytomTM, scoreTomos
 
     def _checkScoredTomos(self, scoreTomos: SetOfPytomScoreTomograms) -> None:
         # Check the results of the pytom_TM
@@ -248,15 +247,13 @@ class TestPytomTM(TestBaseCentralizedLayer):
         #     self.assertGreater(tomo.getTomoNum(), 0)
         #     self.assertEqual(tomo.getSymmetry(), 'C6')
 
-    def _runPytomExtractCoords(self, scoreTomos: SetOfPytomScoreTomograms) \
+    def _runPytomExtractCoords(self, protTMprot: ProtPytomTemplateMatching) \
             -> Union[SetOfCoordinates3D, None]:
         print(magentaStr("\n==> Pytom_TM == > extracting the coordinates"))
         protPytomExtract = self.newProtocol(ProtPytomExtractCoordinates,
-                                              inScoreTomos=scoreTomos,
-                                              scoresThreshold=0.09,
-                                              percentile=99.9,
-                                              partDiameter=self.particleDiameter,
-                                              numberOfCoords=-1)
+                                            inTmProtocol=protTMprot,
+                                            particle_diameter=self.particleDiameter)
+
         self.launchProtocol(protPytomExtract)
         return getattr(protPytomExtract, protPytomExtract._possibleOutputs.coordinates.name, None)
 
@@ -274,14 +271,14 @@ class TestPytomTM(TestBaseCentralizedLayer):
                         ctfSetMsg: str,
                         tsSetMsg: str) -> None:
         # Run the template matching
-        scoreTomos = self._runPytomTM(inCtfSet=inCtfSet,
-                                      inTsSet=inTsSet,
-                                      ctfSetMsg=ctfSetMsg,
-                                      tsSetMsg=tsSetMsg, )
+        protPytomTM, scoreTomos = self._runPytomTM(inCtfSet=inCtfSet,
+                                                   inTsSet=inTsSet,
+                                                   ctfSetMsg=ctfSetMsg,
+                                                   tsSetMsg=tsSetMsg)
         # Check the scored tomograms
         self._checkScoredTomos(scoreTomos)
         # Run the coordinate extraction
-        coords = self._runPytomExtractCoords(scoreTomos)
+        coords = self._runPytomExtractCoords(protPytomTM)
         # Check the results of gapStop's extraction
         self._checkExtractedCoords(coords)
 
