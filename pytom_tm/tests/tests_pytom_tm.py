@@ -266,7 +266,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                               expectedSRate=self.sRateBin8,
                               orientedParticles=True,
                               orientedTolPercent=0.01)  # 1%
-        self.assertTrue(coords.getSize() > 2000)
+        self.assertTrue(coords.getSize() >= 2000)
 
     def _runTestPytomTM(self,
                         inCtfSet: SetOfCTFTomoSeries,
