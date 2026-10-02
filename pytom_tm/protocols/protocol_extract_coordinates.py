@@ -375,7 +375,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             inTomoSet = getattr(input_protocol, IN_TOMOS).get()
             outCoords.setPrecedents(inTomoSet)
             outCoords.setSamplingRate(inScoreTomos.getSamplingRate())
-            outCoords.setBoxSize(self.particle_diameter.get())
+            outCoords.setBoxSize(self.particle_diameter.get() / inScoreTomos.getSamplingRate()) #px
             outCoords.setStreamState(Set.STREAM_OPEN)
 
             self._defineOutputs(**{self._possibleOutputs.coordinates.name: outCoords})
