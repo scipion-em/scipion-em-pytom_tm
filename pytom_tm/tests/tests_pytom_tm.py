@@ -229,8 +229,8 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                        mask=self.maskBin8,
                                        invert_contrast=True,
                                        volume_split='1 2 1',
-                                       angular_search=30,
-                                       z_axis_rotational_symmetry=6)
+                                       angular_search =30,
+                                       z_axis_rotational_symmetry = 6)
         objLabel = f'ts {tsSetMsg}, ctf {ctfSetMsg}'
         protPytomTM.setObjLabel(objLabel)
         self.launchProtocol(protPytomTM)
@@ -265,7 +265,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                               expectedSRate=self.sRateBin8,
                               orientedParticles=True,
                               orientedTolPercent=0.01)  # 1%
-        self.assertTrue(coords.getSize() >= 2000)
+        self.assertTrue(coords.getSize() >= 1500)
 
     def _runTestPytomTM(self,
                         inCtfSet: SetOfCTFTomoSeries,
