@@ -223,7 +223,7 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
             return
         try:
             logger.info(cyanStr(f'tsId = {tsId}: performing extract coordinates...'))
-            Plugin.runPytom(self, self._program, self._generateArguments(tsId), useGpu=False)
+            Plugin.runPytom(self, self._program, self._generateArguments(tsId))
 
         except Exception as e:
             self.failedTsIds.append(tsId)

@@ -228,7 +228,9 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                        reference=self.refBin8,
                                        mask=self.maskBin8,
                                        invert_contrast=True,
-                                       volume_split='1 2 1')
+                                       volume_split='1 2 1',
+                                       angular_search=30,
+                                       z_axis_rotational_symmetry=6)
         objLabel = f'ts {tsSetMsg}, ctf {ctfSetMsg}'
         protPytomTM.setObjLabel(objLabel)
         self.launchProtocol(protPytomTM)
@@ -244,10 +246,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         # PytomScoreTomogram specific attributes
         for tomo in scoreTomos:
             self.assertTrue(exists(tomo.getTomoFile()))
-        #     self.assertTrue(exists(tomo.getAnglesMap()))
-        #     self.assertTrue(exists(tomo.getAngleList()))
-        #     self.assertGreater(tomo.getTomoNum(), 0)
-        #     self.assertEqual(tomo.getSymmetry(), 'C6')
+            self.assertTrue(exists(tomo.getJsonFile()))
 
     def _runPytomExtractCoords(self, protTMprot: ProtPytomTemplateMatching) \
             -> Union[SetOfCoordinates3D, None]:
