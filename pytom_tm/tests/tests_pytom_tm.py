@@ -242,8 +242,8 @@ class TestPytomTM(TestBaseCentralizedLayer):
                             expectedSRate=self.sRateBin8,
                             expectedDimensions=self.expectedTomoDims)
         # PytomScoreTomogram specific attributes
-        # for tomo in scoreTomos:
-        #     self.assertTrue(exists(tomo.getTomoFile()))
+        for tomo in scoreTomos:
+            self.assertTrue(exists(tomo.getTomoFile()))
         #     self.assertTrue(exists(tomo.getAnglesMap()))
         #     self.assertTrue(exists(tomo.getAngleList()))
         #     self.assertGreater(tomo.getTomoNum(), 0)
@@ -255,7 +255,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         protPytomExtract = self.newProtocol(ProtPytomExtractCoordinates,
                                             inTmProtocol=protTMprot,
                                             mask_choice=MASK_NO,
-                                            particle_diameter=self.particleDiameter*self.sRateBin8)
+                                            particle_diameter=self.particleDiameter * self.sRateBin8)
 
         self.launchProtocol(protPytomExtract)
         return getattr(protPytomExtract, protPytomExtract._possibleOutputs.coordinates.name, None)
