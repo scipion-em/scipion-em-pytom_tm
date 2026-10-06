@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 import pwem
 
-__version__ = '3.0.0'
-
 from pytom_tm.constants import V0_13_2, PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD, PYTOM_TM, \
     PYTOM_TM_DEFAULT_VERSION, PYTOM_TM_ENV_NAME
 from pyworkflow import TOMO
 
 _logo = "icon.jpeg"
+__version__ = '3.0.0'
+_references = ['CHAILLET2025100125', 'ijms241713375']
 
-
-# _references = ['']
 
 class Plugin(pwem.Plugin):
     _supportedVersions = [V0_13_2]
@@ -19,7 +17,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineVar(PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD) #association key-value
+        cls._defineVar(PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAULT_ACTIVATION_CMD)  # association key-value
 
     @classmethod
     def getPyTomEnvActivation(cls):
@@ -42,15 +40,16 @@ class Plugin(pwem.Plugin):
         installationCmd += f'touch {PYTOM_TM_INSTALLED}'
 
         PYTOM_TM_commands = [(installationCmd, PYTOM_TM_INSTALLED)]
-        #envPath = os.environ.get('PATH', "")  # keep path since conda likely in there
-        #installEnvVars = {'PATH': envPath} if envPath else None
+        # envPath = os.environ.get('PATH', "")  # keep path since conda likely in there
+        # installEnvVars = {'PATH': envPath} if envPath else None
 
         env.addPackage(PYTOM_TM,
                        version=PYTOM_TM_DEFAULT_VERSION,
                        tar='void.tgz',
                        commands=PYTOM_TM_commands,
-                       neededProgs=cls.getDependencies(), #check if dependencies are available before starting the installation
-                       #vars=installEnvVars,
+                       neededProgs=cls.getDependencies(),
+                       # check if dependencies are available before starting the installation
+                       # vars=installEnvVars,
                        default=True)
 
     @classmethod
@@ -70,4 +69,3 @@ class Plugin(pwem.Plugin):
         cmd += f" && {program} "
 
         protocol.runJob(cmd, args, env=cls.getEnviron(), cwd=cwd, numberOfMpi=numberOfMpi)
-
