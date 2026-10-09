@@ -87,6 +87,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         cls.tomoNoFidBin8 = cls._runImportTomograms()
         cls.maskBin8 = cls._runImportMaskBin8()
         cls.refBin8 = cls._runImportReferenceBin8()
+        # import maschere
         print(
             cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
         return importedTs, importedCtfs
@@ -231,6 +232,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                        volume_split='1 2 1',
                                        angular_search =30,
                                        z_axis_rotational_symmetry = 6)
+
         objLabel = f'ts {tsSetMsg}, ctf {ctfSetMsg}'
         protPytomTM.setObjLabel(objLabel)
         self.launchProtocol(protPytomTM)
@@ -272,6 +274,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                         inTsSet: SetOfTiltSeries,
                         ctfSetMsg: str,
                         tsSetMsg: str) -> None:
+        #parametro maschere
         # Run the template matching
         protPytomTM, scoreTomos = self._runPytomTM(inCtfSet=inCtfSet,
                                                    inTsSet=inTsSet,
