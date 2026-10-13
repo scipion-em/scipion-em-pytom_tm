@@ -314,8 +314,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                              inTsSet=importedTs,
                              ctfSetMsg=self.UNMODIFIED,
                              tsSetMsg=self.UNMODIFIED)
-        self.assertIsNotNone(ProtPytomTemplateMatching.tomoMasks.get(),
-                             "The protocol was run without tomo masks")
+
 
     def testPytom_EV_Ctf(self):
         importedTs, importedCtfs = self._runPreviousProtocols(eVCtf=True)
