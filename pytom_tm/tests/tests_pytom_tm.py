@@ -185,7 +185,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         print(magentaStr("\n==> Importing a set of tomomasks:"))
         protImportSetOfTomoMasks = cls.newProtocol(ProtImportTomomasks,
                                                    filesPath=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPath.value),
-                                                   filesPattern=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPattern.value),
+                                                   filesPattern=DataSetRe4STATuto.tomoMasksPattern.value,
                                                    samplingRate=cls.sRateBin8,
                                                    inputTomos=importedTomo)
         cls.launchProtocol(protImportSetOfTomoMasks)
