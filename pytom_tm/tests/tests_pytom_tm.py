@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 from os.path import exists
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Optional
 from cistem.protocols import CistemProtTsCtffind
 
 from pytom_tm.constants import MASK_NO
@@ -34,12 +34,12 @@ from imod.constants import OUTPUT_TILTSERIES_NAME
 from imod.protocols import ProtImodExcludeViews
 from pwem.objects import VolumeMask
 from tomo.objects import SetOfCTFTomoSeries, SetOfTiltSeries, SetOfCoordinates3D, TiltSeries, CTFTomoSeries, \
-    SetOfTomograms
+    SetOfTomograms, SetOfTomoMasks
 from pytom_tm.protocols import ProtPytomTemplateMatching, ProtPytomExtractCoordinates
 from pwem.protocols import ProtImportMask, ProtImportVolumes
 from pyworkflow.tests import setupTestProject, DataSet
 from pyworkflow.utils import magentaStr, cyanStr
-from tomo.protocols import ProtImportTs, ProtImportTsCTF, ProtImportTomograms
+from tomo.protocols import ProtImportTs, ProtImportTsCTF, ProtImportTomograms, ProtImportTomomasks
 from tomo.protocols.protocol_import_ctf import ImportChoice
 from tomo.protocols.protocol_import_tomograms import OUTPUT_NAME
 from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
@@ -75,7 +75,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
         cls.sRateBin8 = cls.unbinnedSRate * cls.binFactor8
 
     @classmethod
-    def _runPreviousProtocols(cls, eVCtf: bool = False, eVTs: bool = False) \
+    def _runPreviousProtocols(cls, eVCtf: bool = False, eVTs: bool = False, tomoMasks: bool =False) \
             -> Tuple[SetOfTiltSeries, SetOfCTFTomoSeries]:
         print(cyanStr('--------------------------------- RUNNING PREVIOUS PROTOCOLS ---------------------------------'))
         importedTs = cls._runImportTs()
@@ -84,10 +84,11 @@ class TestPytomTM(TestBaseCentralizedLayer):
         importedCtfs = cls._runImportCtf(importedTs)
         if eVCtf:
             cls._excludeSetViews(importedCtfs, excludedViewsDict=cls.ctfExcludedViewsDict)
+        if tomoMasks:
+            cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8()
         cls.tomoNoFidBin8 = cls._runImportTomograms()
         cls.maskBin8 = cls._runImportMaskBin8()
         cls.refBin8 = cls._runImportReferenceBin8()
-        # import maschere
         print(
             cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
         return importedTs, importedCtfs
@@ -180,6 +181,16 @@ class TestPytomTM(TestBaseCentralizedLayer):
         return getattr(protImportRef, ProtImportVolumes._possibleOutputs.outputVolume.name, None)
 
     @classmethod
+    def _runImportSetTomoMasksBin8(cls):
+        print(magentaStr("\n==> Importing a set of tomomasks:"))
+        protImportSetOfTomoMasks = cls.newProtocol(ProtImportTomomasks,
+                                                   filesPath=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPath.value),
+                                                   samplingRate=cls.sRateBin8)
+        cls.launchProtocol(protImportSetOfTomoMasks)
+        return getattr(protImportSetOfTomoMasks, ProtImportTomomasks._possibleOutputs.importTomoMasksOutputs.name, None)
+
+
+    @classmethod
     def _runExcludeViewsProt(cls,
                              inTsSet: SetOfTiltSeries,
                              objLabel: str = None) -> SetOfTiltSeries:
@@ -231,7 +242,8 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                        invert_contrast=True,
                                        volume_split='1 2 1',
                                        angular_search =30,
-                                       z_axis_rotational_symmetry = 6)
+                                       z_axis_rotational_symmetry = 6,
+                                       tomoMasks = self.setTomoMasksBin8)
 
         objLabel = f'ts {tsSetMsg}, ctf {ctfSetMsg}'
         protPytomTM.setObjLabel(objLabel)
@@ -293,6 +305,15 @@ class TestPytomTM(TestBaseCentralizedLayer):
                              inTsSet=importedTs,
                              ctfSetMsg=self.UNMODIFIED,
                              tsSetMsg=self.UNMODIFIED)
+
+    def testPytom_TomoMasks(self):
+        importedTs, importedCtfs = self._runPreviousProtocols(tomoMasks=True)
+        self._runTestPytomTM(inCtfSet=importedCtfs,
+                             inTsSet=importedTs,
+                             ctfSetMsg=self.UNMODIFIED,
+                             tsSetMsg=self.UNMODIFIED)
+        self.assertIsNotNone(ProtPytomTemplateMatching.tomoMasks.get(),
+                             "The protocol was run without tomo masks")
 
     def testPytom_EV_Ctf(self):
         importedTs, importedCtfs = self._runPreviousProtocols(eVCtf=True)
