@@ -84,11 +84,11 @@ class TestPytomTM(TestBaseCentralizedLayer):
         importedCtfs = cls._runImportCtf(importedTs)
         if eVCtf:
             cls._excludeSetViews(importedCtfs, excludedViewsDict=cls.ctfExcludedViewsDict)
-        cls.tomoNoFidBin8 = cls._runImportTomograms()
+        cls.tomoFidBin8 = cls._runImportTomograms()
         cls.maskBin8 = cls._runImportMaskBin8()
         cls.refBin8 = cls._runImportReferenceBin8()
         if tomoMasks:
-            cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8(cls.tomoNoFidBin8)
+            cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8(cls.tomoFidBin8)
         print(
             cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
         return importedTs, importedCtfs
@@ -154,7 +154,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
     def _runImportTomograms(cls) -> SetOfTomograms:
         print(magentaStr("\n==> Importing the tomograms:"))
         protImportTomos = cls.newProtocol(ProtImportTomograms,
-                                          filesPath=cls.ds.getFile(DataSetRe4STATuto.tomogramsNoFidPath.value),
+                                          filesPath=cls.ds.getFile(DataSetRe4STATuto.tomogramsBin8Path.value),
                                           filesPattern='*.mrc',
                                           samplingRate=cls.sRateBin8)  # Bin 8
         cls.launchProtocol(protImportTomos)
@@ -236,7 +236,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                          f"\n\t- CTFs: {ctfSetMsg}"
                          f"\n\t- Tilt-series = {tsSetMsg}"))
         protPytomTM = self.newProtocol(ProtPytomTemplateMatching,
-                                       inTomos=self.tomoNoFidBin8,
+                                       inTomos=self.tomoFidBin8,
                                        inCtfSet=inCtfSet,
                                        inTsSet=inTsSet,
                                        reference=self.refBin8,
