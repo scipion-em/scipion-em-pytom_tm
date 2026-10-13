@@ -84,11 +84,11 @@ class TestPytomTM(TestBaseCentralizedLayer):
         importedCtfs = cls._runImportCtf(importedTs)
         if eVCtf:
             cls._excludeSetViews(importedCtfs, excludedViewsDict=cls.ctfExcludedViewsDict)
-        if tomoMasks:
-            cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8()
         cls.tomoNoFidBin8 = cls._runImportTomograms()
         cls.maskBin8 = cls._runImportMaskBin8()
         cls.refBin8 = cls._runImportReferenceBin8()
+        if tomoMasks:
+            cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8()
         print(
             cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
         return importedTs, importedCtfs
