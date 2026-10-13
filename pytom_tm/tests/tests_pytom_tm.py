@@ -186,7 +186,8 @@ class TestPytomTM(TestBaseCentralizedLayer):
         protImportSetOfTomoMasks = cls.newProtocol(ProtImportTomomasks,
                                                    filesPath=cls.ds.getFile(DataSetRe4STATuto.tomogramsNoFidPath.value),
                                                    filesPattern=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPath.value),
-                                                   samplingRate=cls.sRateBin8)
+                                                   samplingRate=cls.sRateBin8,
+                                                   inputTomos=importedTomo)
         cls.launchProtocol(protImportSetOfTomoMasks)
         return getattr(protImportSetOfTomoMasks, ProtImportTomomasks._possibleOutputs.importTomoMasksOutputs.name, None)
 
