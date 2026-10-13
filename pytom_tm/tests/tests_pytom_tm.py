@@ -189,7 +189,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
                                                    samplingRate=cls.sRateBin8,
                                                    inputTomos=importedTomo)
         cls.launchProtocol(protImportSetOfTomoMasks)
-        return getattr(protImportSetOfTomoMasks, ProtImportTomomasks._possibleOutputs.importTomoMasksOutputs.name, None)
+        return getattr(protImportSetOfTomoMasks, ProtImportTomomasks._possibleOutputs.tomomasks.name, None)
 
 
     @classmethod
