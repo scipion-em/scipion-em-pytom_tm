@@ -181,10 +181,11 @@ class TestPytomTM(TestBaseCentralizedLayer):
         return getattr(protImportRef, ProtImportVolumes._possibleOutputs.outputVolume.name, None)
 
     @classmethod
-    def _runImportSetTomoMasksBin8(cls):
+    def _runImportSetTomoMasksBin8(cls, importedTomo: SetOfTomograms)->SetOfTomoMasks:
         print(magentaStr("\n==> Importing a set of tomomasks:"))
         protImportSetOfTomoMasks = cls.newProtocol(ProtImportTomomasks,
-                                                   filesPath=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPath.value),
+                                                   filesPath=cls.ds.getFile(DataSetRe4STATuto.tomogramsNoFidPath.value),
+                                                   filesPattern=cls.ds.getFile(DataSetRe4STATuto.tomoMasksPath.value),
                                                    samplingRate=cls.sRateBin8)
         cls.launchProtocol(protImportSetOfTomoMasks)
         return getattr(protImportSetOfTomoMasks, ProtImportTomomasks._possibleOutputs.importTomoMasksOutputs.name, None)
