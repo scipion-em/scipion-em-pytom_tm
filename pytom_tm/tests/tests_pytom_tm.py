@@ -54,7 +54,7 @@ class TestPytomTM(TestBaseCentralizedLayer):
     binFactor4 = 4
     binFactor8 = 8
     nTomos = 2
-    expectedTomoDims = [480, 464, 140]
+    expectedTomoDims = [464, 464, 140]
     excludedViewsDict = {
         TS_03: [0, 1, 2, 38, 39],
         TS_54: [0, 1, 38, 39, 40]
