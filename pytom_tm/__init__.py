@@ -6,7 +6,7 @@ from pytom_tm.constants import V0_13_2, PYTOM_TM_ENV_ACTIVATION, PYTOM_TM_DEFAUL
 from pyworkflow import TOMO
 
 _logo = "icon.jpeg"
-__version__ = '3.0.1'
+__version__ = '3.0.2'
 _references = ['CHAILLET2025100125', 'ijms241713375']
 
 
