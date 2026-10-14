@@ -87,10 +87,10 @@ class TestPytomTM(TestBaseCentralizedLayer):
         cls.tomoFidBin8 = cls._runImportTomograms()
         cls.maskBin8 = cls._runImportMaskBin8()
         cls.refBin8 = cls._runImportReferenceBin8()
+        cls.setTomoMasksBin8 = None
         if tomoMasks:
             cls.setTomoMasksBin8 = cls._runImportSetTomoMasksBin8(cls.tomoFidBin8)
-        print(
-            cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
+        print(cyanStr('\n-------------------------------- PREVIOUS PROTOCOLS FINISHED ---------------------------------'))
         return importedTs, importedCtfs
 
     @classmethod
@@ -288,7 +288,6 @@ class TestPytomTM(TestBaseCentralizedLayer):
                         inTsSet: SetOfTiltSeries,
                         ctfSetMsg: str,
                         tsSetMsg: str) -> None:
-        #parametro maschere
         # Run the template matching
         protPytomTM, scoreTomos = self._runPytomTM(inCtfSet=inCtfSet,
                                                    inTsSet=inTsSet,
