@@ -1,3 +1,4 @@
+v3.0.3: fix the angles convention in the angular part of the extracted coordinates.
 v3.0.2: Hotfix in tests.
 v3.0.1: Add requirements.
 v3.0.0: First release.
