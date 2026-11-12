@@ -354,15 +354,17 @@ class ProtPytomExtractCoordinates(ProtPytomBase):
         return coordinate3d
 
     @staticmethod
-    def eulerAngles2matrix(tdrot, tilt, narot):
+    def eulerAngles2matrix(rot, tilt, psi):
         # Relevant info:
-        #   * Pytom's transformation system is ZXZ
-        tdrot = np.deg2rad(float(tdrot))
-        narot = np.deg2rad(float(narot))
-        tilt = np.deg2rad(float(tilt))
-        R = transformations.euler_matrix(tdrot, tilt, narot, axes='szxz')
+        #   * Pytom-match-pick searches with ZXZ angles, but the angles it writes in the star file
+        #     (rlnAngleRot, rlnAngleTilt, rlnAnglePsi) are already converted to Relion's convention (ZYZ).
+        #   * Thus, the matrix is generated as it is done for Relion's particles (see genTransformMatrix
+        #     in reliontomo.convert.convertBase): Relion's matrix, A = Rz(-psi) * Ry(-tilt) * Rz(-rot),
+        #     rotates the template into the particle, and Scipion stores its inverse.
+        angles = -np.deg2rad([float(rot), float(tilt), float(psi)])
+        A = transformations.euler_matrix(angles[0], angles[1], angles[2], axes='szyz')
 
-        return R
+        return np.linalg.inv(A)
 
     def createOutputSet(self) -> SetOfCoordinates3D:
         outCoords = getattr(self, self._possibleOutputs.coordinates.name, None)
