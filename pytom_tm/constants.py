@@ -1,5 +1,3 @@
-from gapstop.constants import IN_SCORE_TOMOS
-
 PYTOM_TM = 'pytom_tm'
 PYTOM_TM_HOME = 'PYTOM_TM_HOME'
 
