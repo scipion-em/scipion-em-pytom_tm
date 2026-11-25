@@ -28,32 +28,29 @@ import hashlib
 import logging
 import os
 import traceback
-import typing
 from enum import Enum
 from os.path import join
-from typing import List, Optional, Union
-
+from typing import List, Optional
 import numpy as np
 from fidder.protocols.protocol_detect_and_erase_fiducials import MASK_SUFFIX
-
 from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image.image_readers import MRCImageReader
-from pwem.objects import VolumeMask, Volume
-from pwem.protocols import EMProtocol
+from pwem.objects import VolumeMask
 from pytom_tm import Plugin
 from pytom_tm.constants import IN_TOMOS, REF_VOL, IN_MASK, TOMO_MASKS, IN_TS_SET, IN_CTF_SET, MRC_EXT, DEFOCUS_EXT, \
-    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, DEFOCUS_HAND_NEG, DEFOCUS_HAND_POS, \
+    TILT_ANGLES_EXT, DOSE_EXT, DOSE_SUFFIX, TOMO_SUFFIX, DEFOCUS_HAND_OFF, \
     BASE_SEED, SCORE_SUFFIX, JSON_EXT, JSON_SUFFIX
 from pytom_tm.objects import SetOfPytomScoreTomograms, PytomScoreTomogram
 from pytom_tm.protocols.protocol_base import ProtPytomBase
 from pyworkflow import BETA
-from pyworkflow.object import Pointer, String, Set
+from pyworkflow.object import String, Set
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam, LEVEL_ADVANCED, \
     EnumParam, GT, GPU_LIST
-from pyworkflow.utils import Message, cyanStr, makePath, redStr, yellowStr
-from tomo.objects import SetOfTiltSeries, SetOfTomograms, SetOfCTFTomoSeries, SetOfTomoMasks, TiltSeries, TiltImage
-from tomo.utils import getObjFromRelation, getCommonTsAndCtfElements, \
-    getTsIdsIntersection, getTsIdsDicts, invertContrast, convertOrLink, genDefocusFileFromScipion, check_sr_and_size
+from pyworkflow.utils import Message, cyanStr, redStr, yellowStr
+from tomo.objects import SetOfTiltSeries, SetOfTomoMasks, TiltSeries, TiltImage
+from tomo.utils import (getObjFromRelation, getTsIdsIntersection, getTsIdsDicts, invertContrast,
+                        convertOrLink, genDefocusFileFromScipion, check_sr_and_size,
+                        getPresentAcqOrdersTsAndCtf)
 
 logger = logging.getLogger(__name__)
 
@@ -394,7 +391,7 @@ class ProtPytomTemplateMatching(ProtPytomBase):
             ts = self.tsDict[tsId]
             ctf = self.ctfDict[tsId]
 
-            presentAcqOrders = getCommonTsAndCtfElements(ts, ctf)
+            presentAcqOrders = getPresentAcqOrdersTsAndCtf(ts, ctf)
             if len(presentAcqOrders) == 0:
                 raise Exception(f'tsId = {tsId} -> No common acquisition orders found between the '
                                 f'tilt-series and the CTF.')
@@ -552,10 +549,10 @@ class ProtPytomTemplateMatching(ProtPytomBase):
     def _getOutputFileName(self, tsId: str, ext: str = MRC_EXT, suffix: str = '') -> str:
         return self._getInputFileName(tsId, ext=ext, suffix=suffix)
 
-    def generateDoseFile(self,
-                         ts: TiltSeries,
+    @staticmethod
+    def generateDoseFile(ts: TiltSeries,
                          dosePath: str,
-                         presentAcqOrders: typing.Set[int]) -> None:
+                         presentAcqOrders: List[int]) -> None:
 
         doseList = []
         for ti in ts.iterItems(orderBy=TiltImage.TILT_ANGLE_FIELD):
